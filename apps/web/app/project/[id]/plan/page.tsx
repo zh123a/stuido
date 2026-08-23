@@ -24,8 +24,14 @@ export default function PlanPage() {
     <div className="min-h-screen bg-[#0a0a0a] text-white">
       <header className="px-6 py-4 border-b border-white/10 flex justify-between">
         <span className="font-bold">Stuido</span>
-        <span className="text-sm text-white/60">创作规划书 · {plan.title}</span>
+        <span className="text-sm text-white/60">创作规划书 · {plan.title} {plan.source === "mock" && <span className="ml-2 px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-xs">Mock AI 演示</span>}</span>
       </header>
+      {plan.source === "mock" && (
+        <div className="mx-6 mt-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200">
+          当前为本地 Mock AI 生成（未配置 LLM Key，仅用于演示）。已做到通读全文后重写，非按句号硬切；配置 DeepSeek / Ark / OpenAI 后将由真实 AI 撰写更精准分镜。
+          <button onClick={() => router.push("/")} className="ml-2 underline">去配置</button>
+        </div>
+      )}
 
       <div className="flex">
         <div className="flex-1 p-6">

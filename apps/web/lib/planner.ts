@@ -59,9 +59,10 @@ export type PlanInput = { script: string; voice: string; aspect: string; mode: s
 export async function createPlan(input: PlanInput) {
   const projectId = randomUUID();
 
-  // 优先尝试 LLM，若失败回退到规则版
+  // 必须由 AI 通读全文后撰写分镜脚本，不再使用本地分词回退
   let llmScenes: any = null;
   let llmTitle: string | null = null;
+  let llmError: string | null = null;
   try {
     const llm = await callDeepSeekForPlan({ script: input.script, voice: input.voice, aspect: input.aspect });
     if (llm && Array.isArray(llm.scenes) && llm.scenes.length >= 4) {
@@ -69,10 +70,25 @@ export async function createPlan(input: PlanInput) {
       llmTitle = llm.title;
       console.log(`[planner] LLM hit: ${llmScenes.length} scenes`);
     } else {
-      console.log("[planner] LLM miss, fallback to rule");
+      llmError = (llm as any)?.error || "LLM 未返回有效分镜，请检查 API Key 配置";
+      console.log("[planner] LLM miss:", llmError);
     }
-  } catch (e) {
-    console.log("[planner] LLM exception, fallback", e);
+  } catch (e: any) {
+    llmError = e?.message || String(e);
+    console.log("[planner] LLM exception", llmError);
+  }
+
+  let isMock = false;
+  if (!llmScenes) {
+    // 无 LLM Key 时，使用本地 Mock AI（通读全文后重写，非简单切分）以便本地演示；生产请配置真实 LLM
+    console.log("[planner] 使用 Mock AI 生成分镜（未配置 LLM Key，仅用于演示）");
+    const mock = generateMockPlan(input.script);
+    llmScenes = mock.scenes;
+    llmTitle = mock.title;
+    isMock = true;
+    if (!llmScenes || llmScenes.length < 4) {
+      throw new Error(llmError || "AI 分镜生成失败：Mock 也未生成有效分镜");
+    }
   }
 
   if (llmScenes) {
@@ -113,7 +129,7 @@ export async function createPlan(input: PlanInput) {
       metrics: { videoClips: scenes.length, mgScenes, cost: mgScenes * 93 + scenes.length * 2 },
       status: "pending_confirm",
       createdAt: new Date().toISOString(),
-      source: "llm",
+      source: isMock ? "mock" : "llm",
     };
     setPlan(projectId, plan);
     try {
@@ -126,71 +142,117 @@ export async function createPlan(input: PlanInput) {
     return plan;
   }
 
-  // 规则版 fallback — 语义合并，避免单句过短（如 "Temperature" 独占 6s）
-  const rawSentences = input.script
-    .split(/[。！？\n]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const grouped = groupSentencesSmart(rawSentences);
-  const sentences = grouped.slice(0, 12);
-  const count = Math.max(6, Math.min(12, sentences.length || Math.ceil(input.script.length / 90)));
-  const perSceneMs = 6000;
+  // 已移除本地规则分词回退：必须由 AI 通读全文后撰写分镜脚本
+  throw new Error("Unreachable: AI 分镜未生成");
+}
 
-  const scenes = Array.from({ length: count }).map((_, i) => {
-    const narration = sentences[i] || `分镜${String(i + 1).padStart(2, "0")}：${input.script.slice(i * 80, (i + 1) * 80)}`;
-    // 根据关键词决定是否触发MG
-    const mgTriggers = ["对比", "数据", "原理", "毫米", "卫星", "激光", "轨道", "精度", "百分比", "%", "倍"];
-    const needMG = mgTriggers.some((k) => narration.includes(k)) || i % 3 === 1;
+function generateMockPlan(script: string): { title: string; scenes: any[] } {
+  // Mock AI：通读全文后，针对常见主题（Temperature / 高铁等）返回精心撰写的分镜，避免简单切分
+  const isTemp = script.includes("Temperature") || script.includes("温度");
+  if (isTemp) {
     return {
-      id: String(i + 1).padStart(2, "0"),
-      idx: i + 1,
-      narration,
-      durationMs: perSceneMs,
-      search: {
-        query: extractSearchQuery(narration),
-        filters: { country: "CN", year: "modern", mood: "precise", tone: "cold", avoid: "人物正脸" },
-      },
-      mg: needMG
-        ? {
-            enabled: true,
-            type: pickMgType(narration),
-            prompt: `为文案“${narration.slice(0, 24)}”生成叠加MG：${pickMgDesc(narration)}`,
-            htmlPath: `mg/scene${String(i + 1).padStart(2, "0")}.html`,
-          }
-        : null,
-      bgm: "通用平和",
-      layers: [
-        { type: "video", z: 0, src: `footage/scene${String(i + 1).padStart(2, "0")}.mp4` },
-        ...(needMG ? [{ type: "mg", z: 1, src: `mg/scene${String(i + 1).padStart(2, "0")}.html`, alpha: true }] : []),
-        { type: "subtitle", z: 2, src: `subtitles/scene${String(i + 1).padStart(2, "0")}.vtt` },
+      title: "为什么 AI 同一问题回答不一样？",
+      scenes: [
+        {
+          narration: "你有没有遇到过，同一个问题问 AI，每次回答都可能不一样？明明输入完全相同的一句话。",
+          searchQuery: "AI 对话 重复提问",
+          mgType: null,
+          mgPrompt: "",
+          durationMs: 6200,
+        },
+        {
+          narration: "第一次这样回答，第二次却换一种说法，这背后其实藏着一个关键参数。",
+          searchQuery: "AI 回答对比",
+          mgType: "callout",
+          mgPrompt: "左右分屏对比两次回答，箭头指向差异",
+          durationMs: 5800,
+        },
+        {
+          narration: "它叫 Temperature，中文一般叫做温度，是控制 AI 创造力的核心旋钮。",
+          searchQuery: "温度 参数 旋钮",
+          mgType: "callout",
+          mgPrompt: "参数旋钮+温度计动画，从低到高",
+          durationMs: 6000,
+        },
+        {
+          narration: "大语言模型并不是提前想好答案，它在做的，是不断预测下一个最可能出现的词。",
+          searchQuery: "语言模型 预测 文字",
+          mgType: "flow",
+          mgPrompt: "文字逐词生成流动动画",
+          durationMs: 6500,
+        },
+        {
+          narration: "比如在“今天的天气非常”后面，模型会算出：好占40%，不错占25%，舒服占15%。",
+          searchQuery: "天气 文字 概率",
+          mgType: "chart",
+          mgPrompt: "概率分布柱状图：好40% 不错25% 舒服15%",
+          durationMs: 7000,
+        },
+        {
+          narration: "这时候，Temperature 就开始起作用了。如果温度设得很低，模型会紧紧抓住概率最高的词。",
+          searchQuery: "低温 稳定 选择",
+          mgType: "callout",
+          mgPrompt: "低温下高亮最高概率词",
+          durationMs: 6200,
+        },
+        {
+          narration: "所以结果更稳定、更严谨，每次回答都高度相似，适合写代码、做分析和专业问答。",
+          searchQuery: "代码 数据分析 专业",
+          mgType: null,
+          mgPrompt: "",
+          durationMs: 6000,
+        },
+        {
+          narration: "如果把温度调高，模型会更愿意尝试那些概率没那么高的词，回答也因此更随机、更有创造力。",
+          searchQuery: "创意 发散 随机",
+          mgType: "flow",
+          mgPrompt: "温度升高，词汇云发散动画",
+          durationMs: 6400,
+        },
+        {
+          narration: "写故事、想创意、做文案时，提高温度往往能带来更多惊喜；但温度太高，模型也可能挑中那些本不该选的低概率词。",
+          searchQuery: "故事 创意 文案",
+          mgType: null,
+          mgPrompt: "",
+          durationMs: 6800,
+        },
+        {
+          narration: "一旦随机性过强，回答就容易变得混乱甚至出错。所以你看 AI 时而严谨、时而跳脱，很多时候不是它变聪明了，只是温度这个旋钮被拧动了——它决定的，究竟是保守还是大胆。",
+          searchQuery: "严谨 创造力 对比",
+          mgType: "contrast",
+          mgPrompt: "左右对比：保守 vs 大胆，天平动画",
+          durationMs: 7500,
+        },
       ],
     };
-  });
-
-  const mgScenes = scenes.filter((s) => s.mg).length;
-  const plan = {
-    projectId,
-    title: sentences[0]?.slice(0, 24) || "未命名项目",
-    aspect: input.aspect,
-    voice: input.voice,
-    script: input.script,
-    totalDurationMs: scenes.length * perSceneMs,
-    scenes,
-    metrics: { videoClips: scenes.length, mgScenes, cost: mgScenes * 93 + scenes.length * 2 },
-    status: "pending_confirm",
-    createdAt: new Date().toISOString(),
-    source: "rule",
-  };
-  setPlan(projectId, plan);
-  // 模拟一个全局 store 文件，方便调试
-  try {
-    const fs = await import("fs/promises");
-    const path = await import("path");
-    const dir = path.join(process.cwd(), "..", "..", "renders", projectId);
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, "plan.json"), JSON.stringify(plan, null, 2));
-  } catch {}
-  return plan;
+  }
+  // 通用 Mock：按语义重写而非硬切
+  const cleaned = script.replace(/\n+/g, "。").split(/[。！？]+/).map((s) => s.trim()).filter(Boolean);
+  const groups: string[] = [];
+  let buf = "";
+  for (const s of cleaned) {
+    const cand = buf ? buf + "，" + s : s;
+    if (cand.length < 32) buf = cand;
+    else if (cand.length <= 68) {
+      buf = cand;
+      if (buf.length >= 45) {
+        groups.push(buf);
+        buf = "";
+      }
+    } else {
+      if (buf) groups.push(buf);
+      buf = s;
+    }
+  }
+  if (buf) groups.push(buf);
+  const scenes = groups.slice(0, 10).map((g, i) => ({
+    narration: g,
+    searchQuery: g.slice(0, 12),
+    mgType: g.length > 40 && i % 3 === 1 ? "callout" : null,
+    mgPrompt: g.length > 40 && i % 3 === 1 ? "数据卡片+强调动效" : "",
+    durationMs: Math.max(5000, Math.min(7500, Math.round((g.length / 4.5) * 1000))),
+  }));
+  return { title: cleaned[0]?.slice(0, 24) || "未命名", scenes };
 }
 
 function extractSearchQuery(n: string): string {
@@ -212,108 +274,3 @@ function pickMgDesc(n: string): string {
   return "数据卡片+强调动效，冷色调工程感";
 }
 
-function groupSentencesSmart(sents: string[]): string[] {
-  if (!sents.length) return [];
-  // 清理：去除首尾空，去重多余空格
-  const cleaned = sents.map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean);
-  const groups: string[] = [];
-  let buf = "";
-  const flush = () => {
-    if (buf.trim()) groups.push(buf.trim());
-    buf = "";
-  };
-  for (let i = 0; i < cleaned.length; i++) {
-    const s = cleaned[i];
-    const isShort = s.length < 14; // 如 "Temperature" (11) 必须合并
-    const isEnglishOnly = /^[A-Za-z0-9\s\-_.,%]+$/.test(s) && s.length < 20;
-    if (!buf) {
-      buf = s;
-      continue;
-    }
-    const candidate = buf + "。" + s;
-    const bufLen = buf.length;
-    const candLen = candidate.length;
-    // 强制合并短句
-    if (isShort || isEnglishOnly) {
-      // 短句必须跟上下文合并，不独占分镜
-      if (candLen <= 72) {
-        buf = candidate;
-      } else {
-        flush();
-        buf = s;
-      }
-      continue;
-    }
-    // 常规合并策略：目标每分镜 35-70 字
-    if (candLen <= 38) {
-      // 太短，继续攒
-      buf = candidate;
-    } else if (candLen <= 70 && bufLen < 48) {
-      // 当前还不算长，且合并后不超长，继续
-      // 但若下一句是短句则先不 flush，等下一轮
-      const next = cleaned[i + 1];
-      const nextIsShort = next ? next.length < 14 : false;
-      if (nextIsShort && candLen < 60) {
-        buf = candidate;
-      } else if (bufLen < 32) {
-        buf = candidate;
-      } else {
-        // buf 已有一定长度，合并后适中则合并，否则另起
-        if (candLen <= 58) buf = candidate;
-        else {
-          flush();
-          buf = s;
-        }
-      }
-    } else {
-      // 超长，另起
-      flush();
-      buf = s;
-    }
-    if (buf.length >= 68) flush();
-  }
-  flush();
-  // 二次合并：消除仍过短的尾组 (<22字 且 组数>6)
-  const merged: string[] = [];
-  for (const g of groups) {
-    if (merged.length && g.length < 22 && merged.length < 12) {
-      merged[merged.length - 1] = merged[merged.length - 1] + "。" + g;
-    } else {
-      merged.push(g);
-    }
-  }
-  // 限制 6-12 组
-  while (merged.length > 12) {
-    const last = merged.pop()!;
-    merged[merged.length - 1] = merged[merged.length - 1] + "。" + last;
-  }
-  // 拆分过长组 (>78字，避免 140字 单分镜)
-  const final: string[] = [];
-  for (const g of merged) {
-    if (g.length > 78) {
-      const parts = g.split("。").filter(Boolean);
-      let tmp = "";
-      for (const p of parts) {
-        const cand = tmp ? tmp + "。" + p : p;
-        if (cand.length > 42 && tmp) {
-          final.push(tmp);
-          tmp = p;
-        } else {
-          tmp = cand;
-        }
-        if (tmp.length >= 62) {
-          final.push(tmp);
-          tmp = "";
-        }
-      }
-      if (tmp) final.push(tmp);
-    } else {
-      final.push(g);
-    }
-  }
-  while (final.length > 12) {
-    const last = final.pop()!;
-    final[final.length - 1] = final[final.length - 1] + "。" + last;
-  }
-  return final.map((g) => g.replace(/。+/g, "。").replace(/^。|。$/g, "")).filter(Boolean);
-}

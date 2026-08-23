@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 export default function HomePage() {
@@ -8,12 +8,26 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [voice, setVoice] = useState("zh-CN-YunxiNeural");
   const [aspect, setAspect] = useState("16:9");
+  const [llmProvider, setLlmProvider] = useState("deepseek");
+  const [llmApiKey, setLlmApiKey] = useState("");
+  const [showLlmConfig, setShowLlmConfig] = useState(false);
   const examples = [
     "热点 | 医保有药，医院没货？",
     "财经 | 长鑫上市，谁是最大赢家",
     "科普 | 韦伯拍到了\"不该存在\"的星系",
     "科普 | 高铁为什么能硬币不倒",
   ];
+
+  useEffect(() => {
+    setLlmApiKey(localStorage.getItem("stuido_llm_key") || "");
+    setLlmProvider(localStorage.getItem("stuido_llm_provider") || "deepseek");
+  }, []);
+
+  function saveLlmConfig() {
+    localStorage.setItem("stuido_llm_key", llmApiKey);
+    localStorage.setItem("stuido_llm_provider", llmProvider);
+    setShowLlmConfig(false);
+  }
 
   async function handleCreate() {
     if (!script.trim()) return alert("请先输入口播稿");
@@ -22,10 +36,21 @@ export default function HomePage() {
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ script, voice, aspect, mode: "standard", preference: "B-素材混合MG" }),
+        body: JSON.stringify({
+          script,
+          voice,
+          aspect,
+          mode: "standard",
+          preference: "B-素材混合MG",
+          llmApiKey: llmApiKey || undefined,
+          llmProvider,
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "创建失败");
+      if (!res.ok) {
+        if (data.needLlmConfig) setShowLlmConfig(true);
+        throw new Error(data.error || "创建失败");
+      }
       router.push(`/project/${data.projectId}/plan`);
     } catch (e: any) {
       alert(e.message);
@@ -91,6 +116,42 @@ export default function HomePage() {
             </div>
           </div>
         </div>
+
+        <div className="mt-4 w-full max-w-4xl flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2 text-white/50">
+            <span>AI 分镜：</span>
+            <span className={`px-2 py-1 rounded-full text-xs ${llmApiKey ? "bg-green-500/20 text-green-300" : "bg-amber-500/20 text-amber-300"}`}>
+              {llmApiKey ? `已配置 ${llmProvider}` : "未配置（需 LLM）"}
+            </span>
+            <span className="text-white/30 hidden sm:inline">通读全文后由 AI 重写分镜，非本地分词</span>
+          </div>
+          <button onClick={() => setShowLlmConfig(true)} className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white/70">
+            配置 LLM
+          </button>
+        </div>
+
+        {showLlmConfig && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowLlmConfig(false)}>
+            <div className="w-full max-w-md rounded-2xl bg-[#1a1a1e] border border-white/10 p-6" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-sm font-bold">配置 AI 分镜 LLM</h3>
+              <p className="mt-2 text-xs text-white/60">分镜脚本必须由 AI 通读全文后撰写，不再使用本地分词。请配置任意 OpenAI 兼容的 LLM。</p>
+              <div className="mt-4 space-y-3">
+                <select value={llmProvider} onChange={(e) => setLlmProvider(e.target.value)} className="w-full bg-[#0f0f12] border border-white/10 rounded-xl px-3 py-2 text-sm text-white">
+                  <option value="deepseek">DeepSeek (deepseek-chat)</option>
+                  <option value="ark">火山方舟 Ark (doubao-seed-1-6)</option>
+                  <option value="openai">OpenAI (gpt-4o-mini)</option>
+                  <option value="dashscope">阿里百炼 DashScope (qwen-plus)</option>
+                </select>
+                <input value={llmApiKey} onChange={(e) => setLlmApiKey(e.target.value)} placeholder="粘贴 API Key (sk-...)" className="w-full bg-[#0f0f12] border border-white/10 rounded-xl px-3 py-2 text-sm placeholder:text-white/30" />
+                <p className="text-[11px] text-white/40">Key 仅存于浏览器 localStorage，也可在服务端 .env 配置 DEEPSEEK_API_KEY / ARK_API_KEY 等后重启。</p>
+                <div className="flex gap-2">
+                  <button onClick={saveLlmConfig} className="flex-1 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-sm font-medium">保存</button>
+                  <button onClick={() => setShowLlmConfig(false)} className="px-4 py-2 rounded-xl bg-white/10 text-sm">取消</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mt-6 flex flex-wrap gap-2 max-w-4xl">
           {examples.map((t) => (
