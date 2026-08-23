@@ -15,3 +15,5 @@ outputs
 # keep lock for reproducibility
 # pnpm-lock.yaml
 # bun.lock kept
+apps/web/data/
+data/

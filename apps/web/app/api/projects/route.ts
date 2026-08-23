@@ -1,5 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPlan } from "@/lib/planner";
+import { requireAuth } from "@/lib/auth";
+import { db, projects } from "@/lib/db";
+import { desc, eq } from "drizzle-orm";
+
+export async function GET(req: NextRequest) {
+  try {
+    const user = await requireAuth(req);
+    const url = new URL(req.url);
+    const page = Math.max(1, parseInt(url.searchParams.get("page") || "1"));
+    const limit = Math.min(50, parseInt(url.searchParams.get("limit") || "20"));
+    const offset = (page - 1) * limit;
+    const isAdmin = user.role === "admin";
+    const rows = isAdmin
+      ? await db.select().from(projects).orderBy(desc(projects.createdAt)).limit(limit).offset(offset)
+      : await db.select().from(projects).where(eq(projects.ownerId, user.id)).orderBy(desc(projects.createdAt)).limit(limit).offset(offset);
+    return NextResponse.json({ projects: rows, page, limit });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || "未登录" }, { status: e.status || 401 });
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,6 +30,13 @@ export async function POST(req: NextRequest) {
     }
     if (script.length > 10000) {
       return NextResponse.json({ error: "口播稿最多10000字" }, { status: 400 });
+    }
+    let user: any = null;
+    try {
+      user = await requireAuth(req);
+    } catch (e: any) {
+      // 允许未登录创建（兼容旧版），但标记为 mock 游客；若需强制登录，取消下一行并返回 401
+      // return NextResponse.json({ error: e.message }, { status: e.status || 401 });
     }
     // 临时注入前端传来的 Key（仅本次请求有效）
     if (llmApiKey) {
@@ -25,6 +52,21 @@ export async function POST(req: NextRequest) {
       }
     }
     const plan = await createPlan({ script, voice, aspect, mode });
+    // 落库 projects（带 owner）
+    try {
+      await db.insert(projects).values({
+        id: plan.projectId,
+        ownerId: user?.id || null,
+        title: plan.title,
+        script: plan.script,
+        voice: plan.voice,
+        aspect: plan.aspect,
+        status: plan.status,
+        planJson: plan as any,
+      });
+    } catch (e) {
+      console.warn("[projects] db insert failed", e);
+    }
     return NextResponse.json({ projectId: plan.projectId, plan });
   } catch (e: any) {
     console.error(e);

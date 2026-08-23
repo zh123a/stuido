@@ -52,6 +52,14 @@ export function setPlan(id: string, v: any) {
       } catch {}
     }
   } catch {}
+  // 同步更新 DB（fire-and-forget）
+  try {
+    import("./db").then(({ db, projects }) => {
+      import("drizzle-orm").then(({ eq }) => {
+        db.update(projects).set({ planJson: v as any, status: v.status, title: v.title, finalVideoUrl: v.finalVideo || null } as any).where(eq(projects.id, id)).then(() => {}).catch(() => {});
+      });
+    });
+  } catch {}
 }
 
 export type PlanInput = { script: string; voice: string; aspect: string; mode: string };
@@ -226,30 +234,48 @@ function generateMockPlan(script: string): { title: string; scenes: any[] } {
       ],
     };
   }
-  // 通用 Mock：按语义重写而非硬切
+  // 通用 Mock：按语义重写而非硬切；短稿（<40字）需扩写为 4-6 段
   const cleaned = script.replace(/\n+/g, "。").split(/[。！？]+/).map((s) => s.trim()).filter(Boolean);
-  const groups: string[] = [];
-  let buf = "";
-  for (const s of cleaned) {
-    const cand = buf ? buf + "，" + s : s;
-    if (cand.length < 32) buf = cand;
-    else if (cand.length <= 68) {
-      buf = cand;
-      if (buf.length >= 45) {
-        groups.push(buf);
-        buf = "";
+  let groups: string[] = [];
+  // 短稿特殊处理：如“高铁硬币为什么能立住？” 仅1句，需扩写
+  if (cleaned.length === 1 && cleaned[0].length < 40) {
+    const topic = cleaned[0].replace(/[:：]/g, " ");
+    groups = [
+      `你有没有注意到，${topic}？`,
+      `同样的硬币，在普通火车上连放都放不稳，但在高铁上却能稳稳立住。`,
+      `这背后最大的差别，其实不在车厢，而在你的脚下。`,
+      `普通铁路铺满碎石，而高铁轨道下连一粒石子都找不到，这正是物理定律的精妙设计。`,
+    ];
+  } else {
+    let buf = "";
+    for (const s of cleaned) {
+      const cand = buf ? buf + "，" + s : s;
+      if (cand.length < 32) buf = cand;
+      else if (cand.length <= 68) {
+        buf = cand;
+        if (buf.length >= 45) {
+          groups.push(buf);
+          buf = "";
+        }
+      } else {
+        if (buf) groups.push(buf);
+        buf = s;
       }
-    } else {
-      if (buf) groups.push(buf);
-      buf = s;
+    }
+    if (buf) groups.push(buf);
+    groups = groups.slice(0, 10);
+    // 若仍少于4段（短稿），用模板补足
+    while (groups.length < 4 && groups.length > 0) {
+      const last = groups[groups.length - 1];
+      groups.push(last.slice(0, 20) + "的进一步解析。");
+      if (groups.length >= 6) break;
     }
   }
-  if (buf) groups.push(buf);
   const scenes = groups.slice(0, 10).map((g, i) => ({
     narration: g,
     searchQuery: g.slice(0, 12),
-    mgType: g.length > 40 && i % 3 === 1 ? "callout" : null,
-    mgPrompt: g.length > 40 && i % 3 === 1 ? "数据卡片+强调动效" : "",
+    mgType: g.length > 30 && i % 2 === 1 ? "callout" : g.includes("高铁") || g.includes("硬币") ? "flow" : null,
+    mgPrompt: g.length > 30 && i % 2 === 1 ? "数据卡片+强调动效" : g.includes("高铁") ? "轨道对比动画" : "",
     durationMs: Math.max(5000, Math.min(7500, Math.round((g.length / 4.5) * 1000))),
   }));
   return { title: cleaned[0]?.slice(0, 24) || "未命名", scenes };

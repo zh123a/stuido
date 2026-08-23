@@ -14,6 +14,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const plan = getPlan(id);
   if (!plan) return NextResponse.json({ error: "not found", id }, { status: 404 });
+  // 归属校验
+  try {
+    const { db, projects } = await import("@/lib/db");
+    const { eq } = await import("drizzle-orm");
+    const [row] = await db.select().from(projects).where(eq(projects.id, id)).limit(1);
+    if (row?.ownerId) {
+      const { getTokenFromHeader, verifyToken } = await import("@/lib/auth");
+      const token = getTokenFromHeader(req);
+      if (token) {
+        try {
+          const p = await verifyToken(token);
+          if ((p as any).role !== "admin" && (p as any).id !== row.ownerId) return NextResponse.json({ error: "无权操作" }, { status: 403 });
+        } catch {}
+      }
+    }
+  } catch {}
   const { cmd } = await req.json();
   if (!cmd || typeof cmd !== "string") return NextResponse.json({ error: "cmd required" }, { status: 400 });
 

@@ -1,20 +1,30 @@
 export type LlmPlanInput = { script: string; voice: string; aspect: string };
 
-// 支持多 LLM 提供商，按优先级尝试：DeepSeek > Ark(Volc) > OpenAI > DashScope
-// 若均未配置，返回带 error 的对象，由 planner 抛出友好提示
 export async function callDeepSeekForPlan(input: LlmPlanInput): Promise<any | null> {
-  // 依次尝试不同提供商
-  const providers = [
-    { key: process.env.DEEPSEEK_API_KEY, base: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com", model: process.env.DEEPSEEK_MODEL || "deepseek-chat", type: "deepseek" },
-    { key: process.env.ARK_API_KEY, base: process.env.ARK_BASE_URL || "https://ark.cn-beijing.volces.com/api/v3", model: process.env.ARK_MODEL || "doubao-seed-1-6-251015", type: "ark" },
-    { key: process.env.OPENAI_API_KEY, base: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1", model: process.env.OPENAI_MODEL || "gpt-4o-mini", type: "openai" },
-    { key: process.env.DASHSCOPE_API_KEY, base: process.env.DASHSCOPE_BASE_URL || "https://dashscope.aliyuncs.com/compatible-mode/v1", model: process.env.DASHSCOPE_MODEL || "qwen-plus", type: "dashscope" },
-  ];
-  const chosen = providers.find((p) => !!p.key);
-  if (!chosen) {
-    return { error: "未配置任何 LLM API Key。请在 .env 中设置 DEEPSEEK_API_KEY (或 ARK_API_KEY / OPENAI_API_KEY / DASHSCOPE_API_KEY) 后重启服务。当前已移除本地规则分词，必须由 AI 通读全文后撰写分镜。" };
+  // 优先走 DB 通道（管理后台配置），再兜底 env
+  let resolved: any = null;
+  try {
+    const { resolveLlmChannel } = await import("./llm-channel");
+    resolved = await resolveLlmChannel();
+  } catch {}
+  if (!resolved) {
+    const providers = [
+      { key: process.env.DEEPSEEK_API_KEY, baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com", model: process.env.DEEPSEEK_MODEL || "deepseek-chat", type: "deepseek" },
+      { key: process.env.ARK_API_KEY, baseUrl: process.env.ARK_BASE_URL || "https://ark.cn-beijing.volces.com/api/v3", model: process.env.ARK_MODEL || "doubao-seed-1-6-251015", type: "ark" },
+      { key: process.env.OPENAI_API_KEY, baseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1", model: process.env.OPENAI_MODEL || "gpt-4o-mini", type: "openai" },
+      { key: process.env.DASHSCOPE_API_KEY, baseUrl: process.env.DASHSCOPE_BASE_URL || "https://dashscope.aliyuncs.com/compatible-mode/v1", model: process.env.DASHSCOPE_MODEL || "qwen-plus", type: "dashscope" },
+    ];
+    const chosen: any = providers.find((p) => !!p.key);
+    if (!chosen) {
+      return { error: "未配置任何 LLM 通道。请在 管理后台→接口通道 新增 DeepSeek/Ark/OpenAI 通道，或在 .env 设置对应 API Key 后重试。" };
+    }
+    resolved = chosen;
   }
-  const { key, base, model, type } = chosen as any;
+  const key: string = (resolved as any).key;
+  const base: string = (resolved as any).baseUrl || (resolved as any).base;
+  const model: string = (resolved as any).model;
+  const type: string = (resolved as any).type;
+  if (!key) return { error: "通道 Key 为空" };
   if (!key) return null;
   try {
     const prompt = buildPrompt(input.script);

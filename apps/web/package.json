@@ -9,6 +9,11 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@libsql/client": "0.15.10",
+    "bcryptjs": "2.4.3",
+    "drizzle-kit": "0.31.4",
+    "drizzle-orm": "0.44.2",
+    "jose": "5.10.0",
     "next": "15.4.5",
     "react": "19.1.0",
     "react-dom": "19.1.0",
