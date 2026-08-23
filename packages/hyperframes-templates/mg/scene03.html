@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{width:1920px;height:1080px;overflow:hidden;background:#0a0f1a;font-family: "PingFang SC","Microsoft YaHei",sans-serif}
+  .scene{position:relative;width:1920px;height:1080px;overflow:hidden}
+  .footage{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:saturate(0.95) brightness(1.02) contrast(1.05)}
+  .footage-fallback{position:absolute;inset:0;background:linear-gradient(135deg,#0f2747 0%,#1a3a5c 25%,#0d2a4a 50%,#14365e 100%)}
+  .grid{position:absolute;inset:0;opacity:0.12;background-image:linear-gradient(rgba(0,229,255,0.5) 1px, transparent 1px),linear-gradient(90deg, rgba(0,229,255,0.5) 1px, transparent 1px);background-size:48px 48px}
+  .mg-layer{position:absolute;inset:0;pointer-events:none}
+  .card{position:absolute;left:50%;top:58%;transform:translateX(-50%);background:rgba(8,16,32,0.78);backdrop-filter:blur(12px);border:1px solid rgba(0,229,255,0.35);color:#e6f7ff;padding:22px 36px;border-radius:20px;font-size:46px;font-weight:700;letter-spacing:1px;box-shadow:0 8px 32px rgba(0,229,255,0.18), inset 0 1px 0 rgba(255,255,255,0.08)}
+  .card small{font-size:26px;color:#8ecfff;font-weight:400;margin-left:12px}
+  .label{position:absolute;padding:8px 14px;background:rgba(0,229,255,0.14);border:1px solid rgba(0,229,255,0.45);border-radius:999px;color:#b3ecff;font-size:22px}
+  .sat{position:absolute;left:50%;top:18%;transform:translate(-50%,-50%);width:84px;height:84px;background:radial-gradient(circle at 30% 30%, #7af0ff, #0097b8);border-radius:50%;box-shadow:0 0 24px rgba(0,229,255,0.9), 0 0 48px rgba(0,229,255,0.35);display:flex;align-items:center;justify-content:center;font-size:34px}
+  .laser{stroke:#00E5FF;stroke-width:5;stroke-linecap:round;filter:drop-shadow(0 0 10px #00E5FF) drop-shadow(0 0 20px rgba(0,229,255,0.6))}
+  .tick{stroke:rgba(255,255,255,0.9);stroke-width:2}
+  .subtitle{position:absolute;left:50%;bottom:48px;transform:translateX(-50%);background:rgba(0,0,0,0.72);color:#fff;padding:12px 20px;border-radius:12px;font-size:28px;max-width:1600px;text-align:center;letter-spacing:0.5px}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+</head>
+<body>
+<div class="scene" data-scene="0-6">
+  <!-- 底层视频：W1用渐变占位，W2替换为 Pexels 实拍 <video src="./footage_轨道板.mp4"> -->
+  <div class="footage-fallback"></div>
+  <div class="grid"></div>
+  <!-- 模拟轨道板灰色矩形 -->
+  <div style="position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:1240px;height:220px;background:linear-gradient(180deg,#d6dde6,#b8c2d0);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,0.45), inset 0 2px 0 rgba(255,255,255,0.8);border:2px solid #a8b4c2"></div>
+  <div style="position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:1180px;height:14px;background:repeating-linear-gradient(90deg,#6b7a8a 0 42px, transparent 42px 48px);opacity:0.9"></div>
+  <!-- 钢轨两条 -->
+  <div style="position:absolute;left:50%;top:52%;transform:translate(-50%,-38px);width:1180px;height:10px;background:#5a6a7d;border-radius:4px"></div>
+  <div style="position:absolute;left:50%;top:52%;transform:translate(-50%,28px);width:1180px;height:10px;background:#5a6a7d;border-radius:4px"></div>
+
+  <div class="mg-layer">
+    <div class="sat">🛰️</div>
+    <div class="label" style="left:320px;top:42%">卫星定位</div>
+    <div class="label" style="right:320px;top:42%">激光测量</div>
+    <svg width="1920" height="1080" style="position:absolute;inset:0">
+      <line class="laser" x1="420" y1="540" x2="960" y2="540" />
+      <line class="laser" x1="1500" y1="540" x2="960" y2="540" />
+      <circle cx="960" cy="540" r="16" fill="#00E5FF" stroke="#fff" stroke-width="3" style="filter:drop-shadow(0 0 12px #00E5FF)" />
+      <!-- 刻度 -->
+      <g class="tick">
+        <line x1="680" y1="620" x2="680" y2="640" /><text x="680" y="670" fill="#b3ecff" font-size="18" text-anchor="middle">0</text>
+        <line x1="960" y1="620" x2="960" y2="640" /><text x="960" y="670" fill="#b3ecff" font-size="18" text-anchor="middle">600mm</text>
+        <line x1="1240" y1="620" x2="1240" y2="640" /><text x="1240" y="670" fill="#b3ecff" font-size="18" text-anchor="middle">1240</text>
+      </g>
+    </svg>
+    <div class="card">2毫米 <small>≈ 2.6张银行卡厚度</small></div>
+    <div class="subtitle">铺设这种混凝土轨道板时，全程由卫星和激光引导，全自动化精调</div>
+  </div>
+</div>
+<script>
+  // Hyperframes seekable timeline：Chromium 会按帧调用 __hyperframes_seek
+  const tl = gsap.timeline({paused:true});
+  tl.from(".sat", {scale:0, duration:0.5, ease:"back.out(1.7)"}, 0)
+    .from(".laser", {scaleX:0, transformOrigin:"center", duration:0.9, ease:"power3.inOut"}, 0.15)
+    .from(".card", {y:30, opacity:0, duration:0.6, ease:"power3.out"}, 0.45)
+    .from(".subtitle", {y:16, opacity:0, duration:0.5}, 0.6)
+    .from(".tick", {opacity:0, duration:0.4}, 0.75);
+  window.__hyperframes_seek = (frame, fps) => tl.seek(frame/fps);
+  // 浏览器预览自动播放
+  if (!window.__hyperframes_seek) tl.play();
+  tl.play();
+</script>
+</body>
+</html>

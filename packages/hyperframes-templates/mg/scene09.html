@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{width:1920px;height:1080px;overflow:hidden;background:#070b1a;font-family:"PingFang SC","Microsoft YaHei",sans-serif}
+  .scene{position:relative;width:1920px;height:1080px}
+  .bg{position:absolute;inset:0;background:radial-gradient(1200px 600px at 50% 0%, #0a2a5a 0%, #070b1a 60%), linear-gradient(180deg, rgba(0,180,255,0.08), transparent)}
+  .grid{position:absolute;inset:0;opacity:0.18;background-image:linear-gradient(rgba(0,229,255,0.4) 1px, transparent 1px),linear-gradient(90deg, rgba(0,229,255,0.4) 1px, transparent 1px);background-size:36px 36px}
+  .card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:780px;background:rgba(10,18,36,0.86);border:1px solid rgba(0,229,255,0.35);border-radius:20px;padding:20px 24px;backdrop-filter:blur(14px);box-shadow:0 16px 48px rgba(0,0,0,0.5)}
+  .card h3{color:#7af0ff;font-size:22px;letter-spacing:1px;display:flex;align-items:center;gap:10px}
+  .num{position:absolute;color:rgba(0,229,255,0.9);font-size:18px;font-family:monospace}
+  .subtitle{position:absolute;left:50%;bottom:48px;transform:translateX(-50%);background:rgba(0,0,0,0.72);color:#fff;padding:12px 20px;border-radius:12px;font-size:28px}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+</head>
+<body>
+<div class="scene" data-scene="0-6">
+  <div class="bg"></div>
+  <div class="grid"></div>
+  <div class="num" style="left:120px;top:200px">585</div>
+  <div class="num" style="right:160px;top:260px">856</div>
+  <div class="num" style="left:420px;top:480px">616</div>
+  <div class="num" style="right:140px;top:520px">652</div>
+  <div class="card">
+    <h3><span style="width:36px;height:36px;background:#00E5FF;color:#001018;display:flex;align-items:center;justify-content:center;border-radius:10px;font-size:18px">≡</span> 智能知识库</h3>
+    <div style="margin-top:16px;height:180px;border:1px dashed rgba(0,229,255,0.25);border-radius:12px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.35)">3D 网格连线示意 (Hyperframes GSAP 可替换为 Three.js)</div>
+  </div>
+  <div class="subtitle">所以现在很多AI知识库，智能搜索，推荐系统</div>
+</div>
+<script>
+  const tl=gsap.timeline({paused:true});
+  tl.from(".card",{scale:0.92, opacity:0, duration:0.6, ease:"power3.out"},0)
+    .from(".num",{opacity:0, y:8, stagger:0.06, duration:0.4},0.2)
+    .from(".subtitle",{y:12, opacity:0, duration:0.45},0.5);
+  window.__hyperframes_seek=(f,fps)=>tl.seek(f/fps);
+  tl.play();
+</script>
+</body>
+</html>

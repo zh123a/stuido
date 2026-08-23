@@ -1,0 +1,15 @@
+{
+  "name": "stuido",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.12.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "doctor": "node scripts/doctor.mjs",
+    "render:demo": "node scripts/render-demo.mjs"
+  },
+  "engines": { "node": ">=22" }
+}

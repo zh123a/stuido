@@ -1,11 +1,13 @@
 node_modules
+.pnpm-store
 dist
 .next
 out
-renders
+renders/demo/*.mp4
+renders/demo/bg*.mp4
 outputs
 .env
 .env.local
-*.mp4
 *.wav
 .DS_Store
+pnpm-lock.yaml
