@@ -126,15 +126,14 @@ export async function createPlan(input: PlanInput) {
     return plan;
   }
 
-  // 规则版 fallback
-  const wordCount = input.script.length;
-  const sentences = input.script
+  // 规则版 fallback — 语义合并，避免单句过短（如 "Temperature" 独占 6s）
+  const rawSentences = input.script
     .split(/[。！？\n]+/)
     .map((s) => s.trim())
-    .filter(Boolean)
-    .slice(0, 12);
-
-  const count = Math.max(6, Math.min(12, sentences.length || Math.ceil(wordCount / 120)));
+    .filter(Boolean);
+  const grouped = groupSentencesSmart(rawSentences);
+  const sentences = grouped.slice(0, 12);
+  const count = Math.max(6, Math.min(12, sentences.length || Math.ceil(input.script.length / 90)));
   const perSceneMs = 6000;
 
   const scenes = Array.from({ length: count }).map((_, i) => {
@@ -208,5 +207,113 @@ function pickMgType(n: string): string {
 function pickMgDesc(n: string): string {
   if (n.includes("毫米") || n.includes("激光")) return "灰色矩形轨道板+激光线交汇+数据卡 2毫米对比";
   if (n.includes("卫星")) return "卫星图标闪烁+激光引导线";
+  if (n.includes("Temperature") || n.includes("温度")) return "参数旋钮+温度计动画，冷色科技感";
+  if (n.includes("概率") || n.includes("%") || n.includes("随机")) return "概率分布柱状图+高亮动效";
   return "数据卡片+强调动效，冷色调工程感";
+}
+
+function groupSentencesSmart(sents: string[]): string[] {
+  if (!sents.length) return [];
+  // 清理：去除首尾空，去重多余空格
+  const cleaned = sents.map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const groups: string[] = [];
+  let buf = "";
+  const flush = () => {
+    if (buf.trim()) groups.push(buf.trim());
+    buf = "";
+  };
+  for (let i = 0; i < cleaned.length; i++) {
+    const s = cleaned[i];
+    const isShort = s.length < 14; // 如 "Temperature" (11) 必须合并
+    const isEnglishOnly = /^[A-Za-z0-9\s\-_.,%]+$/.test(s) && s.length < 20;
+    if (!buf) {
+      buf = s;
+      continue;
+    }
+    const candidate = buf + "。" + s;
+    const bufLen = buf.length;
+    const candLen = candidate.length;
+    // 强制合并短句
+    if (isShort || isEnglishOnly) {
+      // 短句必须跟上下文合并，不独占分镜
+      if (candLen <= 72) {
+        buf = candidate;
+      } else {
+        flush();
+        buf = s;
+      }
+      continue;
+    }
+    // 常规合并策略：目标每分镜 35-70 字
+    if (candLen <= 38) {
+      // 太短，继续攒
+      buf = candidate;
+    } else if (candLen <= 70 && bufLen < 48) {
+      // 当前还不算长，且合并后不超长，继续
+      // 但若下一句是短句则先不 flush，等下一轮
+      const next = cleaned[i + 1];
+      const nextIsShort = next ? next.length < 14 : false;
+      if (nextIsShort && candLen < 60) {
+        buf = candidate;
+      } else if (bufLen < 32) {
+        buf = candidate;
+      } else {
+        // buf 已有一定长度，合并后适中则合并，否则另起
+        if (candLen <= 58) buf = candidate;
+        else {
+          flush();
+          buf = s;
+        }
+      }
+    } else {
+      // 超长，另起
+      flush();
+      buf = s;
+    }
+    if (buf.length >= 68) flush();
+  }
+  flush();
+  // 二次合并：消除仍过短的尾组 (<22字 且 组数>6)
+  const merged: string[] = [];
+  for (const g of groups) {
+    if (merged.length && g.length < 22 && merged.length < 12) {
+      merged[merged.length - 1] = merged[merged.length - 1] + "。" + g;
+    } else {
+      merged.push(g);
+    }
+  }
+  // 限制 6-12 组
+  while (merged.length > 12) {
+    const last = merged.pop()!;
+    merged[merged.length - 1] = merged[merged.length - 1] + "。" + last;
+  }
+  // 拆分过长组 (>78字，避免 140字 单分镜)
+  const final: string[] = [];
+  for (const g of merged) {
+    if (g.length > 78) {
+      const parts = g.split("。").filter(Boolean);
+      let tmp = "";
+      for (const p of parts) {
+        const cand = tmp ? tmp + "。" + p : p;
+        if (cand.length > 42 && tmp) {
+          final.push(tmp);
+          tmp = p;
+        } else {
+          tmp = cand;
+        }
+        if (tmp.length >= 62) {
+          final.push(tmp);
+          tmp = "";
+        }
+      }
+      if (tmp) final.push(tmp);
+    } else {
+      final.push(g);
+    }
+  }
+  while (final.length > 12) {
+    const last = final.pop()!;
+    final[final.length - 1] = final[final.length - 1] + "。" + last;
+  }
+  return final.map((g) => g.replace(/。+/g, "。").replace(/^。|。$/g, "")).filter(Boolean);
 }
