@@ -69,12 +69,16 @@ export default function PlanPage() {
             <div className="flex justify-between font-bold pt-2 border-t border-white/10"><span>总预估消耗</span><span className="text-purple-400">{plan.metrics.cost}</span></div>
           </div>
           <button
-            onClick={() => router.push(`/project/${id}/edit`)}
+            onClick={async () => {
+              const r = await fetch(`/api/projects/${id}/confirm`, { method: "POST" });
+              if (r.ok) router.push(`/project/${id}/edit`);
+              else alert("确认失败");
+            }}
             className="mt-6 w-full py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 font-bold"
           >
-            186 确认并继续
+            {plan.metrics.cost} 确认并继续
           </button>
-          <p className="mt-2 text-xs text-white/40">W1 版本：确认后进入时间线编辑器，素材/MG为占位，后续接真实渲染</p>
+          <p className="mt-2 text-xs text-white/40">W2：确认后触发并行生成（TTS+素材+MG），编辑器可实时查看进度</p>
           <div className="mt-6 p-3 rounded-xl bg-white/5 text-xs text-white/60">
             分镜方案已生成，请确认是否满足创作需求，确认后即可开始制作视频成片。
           </div>

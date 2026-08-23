@@ -3,6 +3,8 @@ node_modules
 dist
 .next
 out
+renders/
+apps/web/renders/
 renders/demo/*.mp4
 renders/demo/bg*.mp4
 outputs
@@ -10,4 +12,6 @@ outputs
 .env.local
 *.wav
 .DS_Store
-pnpm-lock.yaml
+# keep lock for reproducibility, but ignore in this repo
+# pnpm-lock.yaml
+bun.lock

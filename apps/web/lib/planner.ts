@@ -1,23 +1,145 @@
 import { randomUUID } from "crypto";
+import { callDeepSeekForPlan } from "./llm";
 
 // 内存存储，W1简化版，后续替换为 Postgres + BullMQ
 const store = new Map<string, any>();
-export function getPlan(id: string) { return store.get(id); }
-export function setPlan(id: string, v: any) { store.set(id, v); }
+export function getPlan(id: string) {
+  // 优先从磁盘读取（保证跨路由共享，单进程多实例也能同步）
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const candidates = [
+      path.join(process.cwd(), "..", "..", "renders", id, "plan.json"),
+      path.join(process.cwd(), "renders", id, "plan.json"),
+      path.join(process.cwd(), "..", "renders", id, "plan.json"),
+      path.join("/Users/zh/项目/stuido/renders", id, "plan.json"),
+      path.join("/Users/zh/项目/stuido/apps/web/renders", id, "plan.json"),
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        try {
+          const j = JSON.parse(fs.readFileSync(p, "utf8"));
+          // 若内存也有，比较 finalVideo/renderedAt，磁盘更新则覆盖内存
+          const mem = store.get(id);
+          if (!mem || (j as any).finalVideo || (j as any).renderedAt || JSON.stringify(j) !== JSON.stringify(mem)) {
+            store.set(id, j);
+          }
+          return j;
+        } catch {}
+      }
+    }
+  } catch {}
+  return store.get(id);
+}
+export function setPlan(id: string, v: any) {
+  store.set(id, v);
+  // 同步写盘，保证跨实例可见
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const candidates = [
+      path.join(process.cwd(), "..", "..", "renders", id, "plan.json"),
+      path.join(process.cwd(), "renders", id, "plan.json"),
+    ];
+    const dir = candidates[0].replace(/\/plan\.json$/, "");
+    // 尝试两处都写
+    for (const p of candidates) {
+      try {
+        const d = require("path").dirname(p);
+        fs.mkdirSync(d, { recursive: true });
+        fs.writeFileSync(p, JSON.stringify(v, null, 2));
+      } catch {}
+    }
+    // 额外写绝对路径
+    for (const abs of [path.join("/Users/zh/项目/stuido/renders", id, "plan.json"), path.join("/Users/zh/项目/stuido/apps/web/renders", id, "plan.json")]) {
+      try {
+        fs.mkdirSync(path.dirname(abs), { recursive: true });
+        fs.writeFileSync(abs, JSON.stringify(v, null, 2));
+      } catch {}
+    }
+  } catch {}
+}
 
 export type PlanInput = { script: string; voice: string; aspect: string; mode: string };
 
 export async function createPlan(input: PlanInput) {
   const projectId = randomUUID();
+
+  // 优先尝试 LLM，若失败回退到规则版
+  let llmScenes: any = null;
+  let llmTitle: string | null = null;
+  try {
+    const llm = await callDeepSeekForPlan({ script: input.script, voice: input.voice, aspect: input.aspect });
+    if (llm && Array.isArray(llm.scenes) && llm.scenes.length >= 4) {
+      llmScenes = llm.scenes;
+      llmTitle = llm.title;
+      console.log(`[planner] LLM hit: ${llmScenes.length} scenes`);
+    } else {
+      console.log("[planner] LLM miss, fallback to rule");
+    }
+  } catch (e) {
+    console.log("[planner] LLM exception, fallback", e);
+  }
+
+  if (llmScenes) {
+    const scenes = llmScenes.slice(0, 12).map((s: any, i: number) => ({
+      id: String(i + 1).padStart(2, "0"),
+      idx: i + 1,
+      narration: String(s.narration || "").trim() || `分镜${i + 1}`,
+      durationMs: Number(s.durationMs) || 6000,
+      search: {
+        query: String(s.searchQuery || s.search_query || "").slice(0, 20) || extractSearchQuery(String(s.narration || "")),
+        filters: { country: "CN", year: "modern", mood: "precise", tone: "cold", avoid: "人物正脸" },
+      },
+      mg: s.mgType && s.mgType !== "null"
+        ? { enabled: true, type: s.mgType, prompt: String(s.mgPrompt || ""), htmlPath: `mg/scene${String(i + 1).padStart(2, "0")}.html` }
+        : s.mgPrompt
+        ? { enabled: true, type: s.mgType || "callout", prompt: String(s.mgPrompt), htmlPath: `mg/scene${String(i + 1).padStart(2, "0")}.html` }
+        : null,
+      bgm: "通用平和",
+      layers: [] as any[],
+    }));
+    // 补 layers
+    for (const s of scenes) {
+      s.layers = [
+        { type: "video", z: 0, src: `footage/scene${s.id}.mp4` },
+        ...(s.mg ? [{ type: "mg", z: 1, src: `mg/scene${s.id}.html`, alpha: true }] : []),
+        { type: "subtitle", z: 2, src: `subtitles/scene${s.id}.vtt` },
+      ];
+    }
+    const mgScenes = scenes.filter((s: any) => s.mg).length;
+    const plan = {
+      projectId,
+      title: (llmTitle || scenes[0]?.narration?.slice(0, 24) || "未命名项目").slice(0, 24),
+      aspect: input.aspect,
+      voice: input.voice,
+      script: input.script,
+      totalDurationMs: scenes.reduce((a: number, s: any) => a + s.durationMs, 0),
+      scenes,
+      metrics: { videoClips: scenes.length, mgScenes, cost: mgScenes * 93 + scenes.length * 2 },
+      status: "pending_confirm",
+      createdAt: new Date().toISOString(),
+      source: "llm",
+    };
+    setPlan(projectId, plan);
+    try {
+      const fs = await import("fs/promises");
+      const path = await import("path");
+      const dir = path.join(process.cwd(), "..", "..", "renders", projectId);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, "plan.json"), JSON.stringify(plan, null, 2));
+    } catch {}
+    return plan;
+  }
+
+  // 规则版 fallback
   const wordCount = input.script.length;
-  // 简单文稿分析：按句号/换行切分，生成分镜，W1先做规则版，后续接LLM
   const sentences = input.script
     .split(/[。！？\n]+/)
     .map((s) => s.trim())
     .filter(Boolean)
     .slice(0, 12);
 
-  // 若句子太少，按字数兜底
   const count = Math.max(6, Math.min(12, sentences.length || Math.ceil(wordCount / 120)));
   const perSceneMs = 6000;
 
@@ -64,6 +186,7 @@ export async function createPlan(input: PlanInput) {
     metrics: { videoClips: scenes.length, mgScenes, cost: mgScenes * 93 + scenes.length * 2 },
     status: "pending_confirm",
     createdAt: new Date().toISOString(),
+    source: "rule",
   };
   setPlan(projectId, plan);
   // 模拟一个全局 store 文件，方便调试

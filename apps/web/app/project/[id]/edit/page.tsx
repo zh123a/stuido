@@ -5,12 +5,78 @@ import { useParams } from "next/navigation";
 export default function EditPage() {
   const { id } = useParams<{ id: string }>();
   const [plan, setPlan] = useState<any>(null);
+  const [progress, setProgress] = useState<any>(null);
+  const [cmd, setCmd] = useState("");
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/projects/${id}`).then(async (r) => {
       if (r.ok) setPlan(await r.json());
     });
   }, [id]);
+
+  useEffect(() => {
+    // SSE 轮询进度
+    let es: EventSource | null = null;
+    let timer: any = null;
+    const useSSE = () => {
+      try {
+        es = new EventSource(`/api/projects/${id}/status`);
+        es.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            setProgress(data.progress);
+            if (data.plan) setPlan(data.plan);
+            if (data.plan?.finalVideo) setVideoUrl(`/api/projects/${id}/preview`);
+            if (data.progress?.done) es?.close();
+          } catch {}
+        };
+        es.onerror = () => {
+          es?.close();
+          // 降级轮询
+          timer = setInterval(async () => {
+            const r = await fetch(`/api/projects/${id}/status`);
+            if (r.ok) {
+              const data = await r.json();
+              setProgress(data.progress);
+              if (data.plan) setPlan(data.plan);
+              if (data.plan?.finalVideo) setVideoUrl(`/api/projects/${id}/preview`);
+              if (data.progress?.done) clearInterval(timer);
+            }
+          }, 1200);
+        };
+      } catch {
+        timer = setInterval(async () => {
+          const r = await fetch(`/api/projects/${id}/status`);
+          if (r.ok) {
+            const data = await r.json();
+            setProgress(data.progress);
+            if (data.plan) setPlan(data.plan);
+            if (data.plan?.finalVideo) setVideoUrl(`/api/projects/${id}/preview`);
+          }
+        }, 1200);
+      }
+    };
+    useSSE();
+    return () => {
+      es?.close();
+      if (timer) clearInterval(timer);
+    };
+  }, [id]);
+
+  async function handleEdit() {
+    if (!cmd.trim()) return;
+    const r = await fetch(`/api/projects/${id}/edit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cmd }),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      setPlan(data.plan);
+      setCmd("");
+    } else alert(data.error || "编辑失败");
+  }
 
   if (!plan) return <div className="p-10 text-white/60">加载编辑器...</div>;
 
@@ -19,7 +85,15 @@ export default function EditPage() {
       <header className="h-14 px-4 flex items-center justify-between border-b border-white/10 shrink-0">
         <span className="font-bold">Stuido · {plan.title}</span>
         <span className="text-xs text-white/60">分镜总数 {plan.scenes.length} | 总时长 00:{String(Math.floor(plan.totalDurationMs / 1000)).padStart(2, "0")}</span>
-        <button className="px-4 py-1 rounded-full bg-white/10 text-sm">导出</button>
+        <div className="flex items-center gap-2">
+          {progress && !progress.done && <span className="text-xs px-3 py-1 rounded-full bg-purple-500/20 text-purple-300">{progress.step} {progress.progress}%</span>}
+          {progress?.done && <span className="text-xs px-3 py-1 rounded-full bg-green-500/20 text-green-300">渲染完成</span>}
+          {videoUrl ? (
+            <a href={videoUrl} download className="px-4 py-1 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm">导出MP4</a>
+          ) : (
+            <button className="px-4 py-1 rounded-full bg-white/10 text-sm opacity-50" disabled>导出</button>
+          )}
+        </div>
       </header>
 
       <div className="flex flex-1 min-h-0">
@@ -42,15 +116,19 @@ export default function EditPage() {
             <span className="px-3 py-1 rounded-full bg-white/10">16:9</span>
           </div>
           <div className="mt-3 flex-1 bg-[#141416] rounded-xl border border-white/10 flex items-center justify-center relative overflow-hidden">
-            {/* W1占位预览：视频底+MG叠加示意 */}
-            <div className="w-[720px] h-[405px] bg-gradient-to-br from-blue-900/40 to-cyan-900/40 rounded-xl border border-white/10 relative flex items-center justify-center">
-              <div className="absolute inset-0 opacity-30" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)", backgroundSize: "24px 24px" }} />
-              <div className="px-4 py-2 rounded-xl bg-black/70 border border-white/20 text-sm">智能知识库</div>
-              <div className="absolute bottom-6 left-6 right-6 text-center text-sm bg-black/60 px-3 py-1 rounded">所以现在很多AI知识库，智能搜索，推荐系统</div>
-            </div>
+            {videoUrl ? (
+              <video src={videoUrl} controls className="w-[720px] h-[405px] rounded-xl bg-black" />
+            ) : (
+              <div className="w-[720px] h-[405px] bg-gradient-to-br from-blue-900/40 to-cyan-900/40 rounded-xl border border-white/10 relative flex items-center justify-center">
+                <div className="absolute inset-0 opacity-30" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)", backgroundSize: "24px 24px" }} />
+                <div className="px-4 py-2 rounded-xl bg-black/70 border border-white/20 text-sm">智能知识库</div>
+                <div className="absolute bottom-6 left-6 right-6 text-center text-sm bg-black/60 px-3 py-1 rounded">所以现在很多AI知识库，智能搜索，推荐系统</div>
+                {progress && <div className="absolute bottom-2 text-xs text-white/50">{progress.step} {progress.progress}%</div>}
+              </div>
+            )}
           </div>
-          <div className="mt-3 flex items-center justify-center gap-4 text-white/60">
-            <span>◀◀</span> <span className="w-8 h-8 rounded-full bg-white text-black flex items-center justify-center">▶</span> <span>▶▶</span>
+          <div className="mt-3 flex items-center justify-center gap-4 text-white/60 text-xs">
+            {progress?.step === "done" ? "✓ 9个MG动画已叠加 · BGM已自动配好" : progress ? `生成中: ${progress.step} ${progress.progress}%` : "等待确认后开始生成"}
           </div>
         </div>
 
@@ -74,9 +152,22 @@ export default function EditPage() {
             <div>BGM已自动配好：通用平和风格</div>
           </div>
           <div className="mt-4">
-            <input placeholder="输入你的任何想法" className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs placeholder:text-white/30" />
-            <div className="mt-2 flex gap-2">
-              <button className="px-3 py-1 rounded-full bg-white/10 text-xs">+ 分镜09 ×</button>
+            <div className="flex gap-2">
+              <input
+                value={cmd}
+                onChange={(e) => setCmd(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleEdit()}
+                placeholder="输入你的任何想法，如：合并前3个分镜"
+                className="flex-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs placeholder:text-white/30"
+              />
+              <button onClick={handleEdit} className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-xs">发送</button>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {["合并前3个分镜", "把所有外国人素材换成中国人", "把分镜09的MG换成柱状图"].map((t) => (
+                <button key={t} onClick={() => setCmd(t)} className="px-3 py-1 rounded-full bg-white/10 text-xs hover:bg-white/20">
+                  {t}
+                </button>
+              ))}
             </div>
           </div>
         </div>
