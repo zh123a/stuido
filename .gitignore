@@ -1,0 +1,11 @@
+node_modules
+dist
+.next
+out
+renders
+outputs
+.env
+.env.local
+*.mp4
+*.wav
+.DS_Store

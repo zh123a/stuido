@@ -1,0 +1,32 @@
+{
+  "projectId": "00000000-0000-0000-0000-000000000001",
+  "title": "高铁上硬币为什么能立住？秘密藏在脚下",
+  "aspect": "16:9",
+  "voice": "zh-CN-YunxiNeural",
+  "totalDurationMs": 76000,
+  "scenes": [
+    {
+      "id": "03",
+      "idx": 3,
+      "narration": "铺设这种混凝土轨道板时，全程由卫星和激光引导，全自动化精调。",
+      "durationMs": 6000,
+      "search": {
+        "query": "高铁轨道板精调实拍 激光测量",
+        "filters": { "country": "CN", "year": "modern", "mood": "precise", "tone": "cold", "avoid": "人物正脸" }
+      },
+      "mg": {
+        "enabled": true,
+        "type": "flow",
+        "prompt": "灰色矩形轨道板+卫星图标闪烁+激光线交汇于钢轨",
+        "htmlPath": "mg/scene03.html"
+      },
+      "bgm": "通用平和",
+      "layers": [
+        { "type": "video", "z": 0, "src": "footage/轨道板精调.mp4" },
+        { "type": "mg", "z": 1, "src": "mg/scene03.html", "alpha": true },
+        { "type": "subtitle", "z": 2, "src": "subtitles/scene03.vtt" }
+      ]
+    }
+  ],
+  "metrics": { "videoClips": 18, "mgScenes": 2, "cost": 186 }
+}

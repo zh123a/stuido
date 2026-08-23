@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Stuido Plan IR",
+  "description": "创作规划书 + 时间线IR，對標花生AI創作規劃書(圖3)與時間線編輯器(圖4)",
+  "type": "object",
+  "required": ["projectId", "title", "totalDurationMs", "scenes"],
+  "properties": {
+    "projectId": { "type": "string", "format": "uuid" },
+    "title": { "type": "string", "example": "高铁上硬币为什么能立住？秘密藏在脚下" },
+    "aspect": { "type": "string", "enum": ["16:9", "9:16", "1:1"], "default": "16:9" },
+    "voice": { "type": "string", "example": "zh-CN-YunxiNeural" },
+    "totalDurationMs": { "type": "integer", "example": 76000 },
+    "scenes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "idx", "narration", "durationMs", "layers"],
+        "properties": {
+          "id": { "type": "string", "example": "03" },
+          "idx": { "type": "integer", "example": 3 },
+          "narration": { "type": "string", "example": "铺设这种混凝土轨道板时，全程由卫星和激光引导..." },
+          "durationMs": { "type": "integer", "example": 6000 },
+          "search": {
+            "type": "object",
+            "properties": {
+              "query": { "type": "string", "example": "高铁轨道板精调实拍 激光测量" },
+              "filters": {
+                "type": "object",
+                "properties": {
+                  "country": { "type": "string", "example": "CN" },
+                  "year": { "type": "string", "example": "modern" },
+                  "mood": { "type": "string", "example": "precise" },
+                  "tone": { "type": "string", "example": "cold" },
+                  "avoid": { "type": "string", "example": "人物正脸" }
+                }
+              }
+            }
+          },
+          "mg": {
+            "type": ["object", "null"],
+            "properties": {
+              "enabled": { "type": "boolean", "default": true },
+              "type": { "type": "string", "enum": ["chart", "flow", "contrast", "callout", "physics"], "example": "flow" },
+              "prompt": { "type": "string", "example": "灰色矩形轨道板+卫星图标闪烁+激光线交汇" },
+              "htmlPath": { "type": "string", "example": "mg/scene03.html" }
+            }
+          },
+          "bgm": { "type": "string", "example": "通用平和" },
+          "layers": {
+            "type": "array",
+            "description": "z-order: 0=video bottom, 1=mg transparent, 2=subtitle top",
+            "items": {
+              "type": "object",
+              "required": ["type", "z"],
+              "properties": {
+                "type": { "type": "string", "enum": ["video", "mg", "subtitle", "bgm", "tts"] },
+                "z": { "type": "integer", "minimum": 0 },
+                "src": { "type": "string", "example": "footage/轨道板.mp4" },
+                "alpha": { "type": "boolean", "default": false },
+                "style": { "type": "object" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "videoClips": { "type": "integer", "example": 18 },
+        "mgScenes": { "type": "integer", "example": 2 },
+        "cost": { "type": "integer", "example": 186 }
+      }
+    }
+  }
+}
