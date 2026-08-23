@@ -1,25 +1,24 @@
 import { randomUUID } from "crypto";
 import { callDeepSeekForPlan } from "./llm";
+import fsSync from "fs";
+import pathSync from "path";
 
 // 内存存储，W1简化版，后续替换为 Postgres + BullMQ
 const store = new Map<string, any>();
 export function getPlan(id: string) {
   // 优先从磁盘读取（保证跨路由共享，单进程多实例也能同步）
   try {
-    const fs = require("fs");
-    const path = require("path");
     const candidates = [
-      path.join(process.cwd(), "..", "..", "renders", id, "plan.json"),
-      path.join(process.cwd(), "renders", id, "plan.json"),
-      path.join(process.cwd(), "..", "renders", id, "plan.json"),
-      path.join("/Users/zh/项目/stuido/renders", id, "plan.json"),
-      path.join("/Users/zh/项目/stuido/apps/web/renders", id, "plan.json"),
+      pathSync.join(process.cwd(), "..", "..", "renders", id, "plan.json"),
+      pathSync.join(process.cwd(), "renders", id, "plan.json"),
+      pathSync.join(process.cwd(), "..", "renders", id, "plan.json"),
+      pathSync.join("/Users/zh/项目/stuido/renders", id, "plan.json"),
+      pathSync.join("/Users/zh/项目/stuido/apps/web/renders", id, "plan.json"),
     ];
     for (const p of candidates) {
-      if (fs.existsSync(p)) {
+      if (fsSync.existsSync(p)) {
         try {
-          const j = JSON.parse(fs.readFileSync(p, "utf8"));
-          // 若内存也有，比较 finalVideo/renderedAt，磁盘更新则覆盖内存
+          const j = JSON.parse(fsSync.readFileSync(p, "utf8"));
           const mem = store.get(id);
           if (!mem || (j as any).finalVideo || (j as any).renderedAt || JSON.stringify(j) !== JSON.stringify(mem)) {
             store.set(id, j);
@@ -35,26 +34,21 @@ export function setPlan(id: string, v: any) {
   store.set(id, v);
   // 同步写盘，保证跨实例可见
   try {
-    const fs = require("fs");
-    const path = require("path");
     const candidates = [
-      path.join(process.cwd(), "..", "..", "renders", id, "plan.json"),
-      path.join(process.cwd(), "renders", id, "plan.json"),
+      pathSync.join(process.cwd(), "..", "..", "renders", id, "plan.json"),
+      pathSync.join(process.cwd(), "renders", id, "plan.json"),
     ];
-    const dir = candidates[0].replace(/\/plan\.json$/, "");
-    // 尝试两处都写
     for (const p of candidates) {
       try {
-        const d = require("path").dirname(p);
-        fs.mkdirSync(d, { recursive: true });
-        fs.writeFileSync(p, JSON.stringify(v, null, 2));
+        const d = pathSync.dirname(p);
+        fsSync.mkdirSync(d, { recursive: true });
+        fsSync.writeFileSync(p, JSON.stringify(v, null, 2));
       } catch {}
     }
-    // 额外写绝对路径
-    for (const abs of [path.join("/Users/zh/项目/stuido/renders", id, "plan.json"), path.join("/Users/zh/项目/stuido/apps/web/renders", id, "plan.json")]) {
+    for (const abs of [pathSync.join("/Users/zh/项目/stuido/renders", id, "plan.json"), pathSync.join("/Users/zh/项目/stuido/apps/web/renders", id, "plan.json")]) {
       try {
-        fs.mkdirSync(path.dirname(abs), { recursive: true });
-        fs.writeFileSync(abs, JSON.stringify(v, null, 2));
+        fsSync.mkdirSync(pathSync.dirname(abs), { recursive: true });
+        fsSync.writeFileSync(abs, JSON.stringify(v, null, 2));
       } catch {}
     }
   } catch {}

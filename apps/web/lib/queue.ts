@@ -3,6 +3,7 @@ import { synthesizeTTS } from "./tts";
 import { searchPexels } from "./pexels";
 import path from "path";
 import fs from "fs/promises";
+import fsSync from "fs";
 import { execFile } from "child_process";
 import { promisify } from "util";
 const execFileAsync = promisify(execFile);
@@ -25,18 +26,16 @@ function progressFile(id: string) {
 }
 function writeProgressFile(id: string, s: JobStatus) {
   try {
-    const fsSync = require("fs");
     const p = progressFile(id);
-    fsSync.mkdirSync(require("path").dirname(p), { recursive: true });
+    fsSync.mkdirSync(path.dirname(p), { recursive: true });
     fsSync.writeFileSync(p, JSON.stringify(s));
-    // also write to alt
     for (const alt of [
       path.join("/Users/zh/项目/stuido/renders", id, "progress.json"),
       path.join("/Users/zh/项目/stuido/apps/web/renders", id, "progress.json"),
     ]) {
       try {
-        require("fs").mkdirSync(require("path").dirname(alt), { recursive: true });
-        require("fs").writeFileSync(alt, JSON.stringify(s));
+        fsSync.mkdirSync(path.dirname(alt), { recursive: true });
+        fsSync.writeFileSync(alt, JSON.stringify(s));
       } catch {}
     }
   } catch {}
@@ -45,9 +44,7 @@ function writeProgressFile(id: string, s: JobStatus) {
 export function getProgress(id: string) {
   const mem = progressMap.get(id);
   if (mem && mem.done) return mem;
-  // 尝试从磁盘读取（跨实例共享）
   try {
-    const fsSync = require("fs");
     for (const p of [
       path.join(process.cwd(), "..", "..", "renders", id, "progress.json"),
       path.join(process.cwd(), "renders", id, "progress.json"),

@@ -12,6 +12,6 @@ outputs
 .env.local
 *.wav
 .DS_Store
-# keep lock for reproducibility, but ignore in this repo
+# keep lock for reproducibility
 # pnpm-lock.yaml
-bun.lock
+# bun.lock kept
