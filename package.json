@@ -11,5 +11,11 @@
     "doctor": "node scripts/doctor.mjs",
     "render:demo": "node scripts/render-demo.mjs"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "hyperframes": "0.7.60",
+    "puppeteer-core": "25.8.0"
+  }
 }

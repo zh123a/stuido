@@ -1,6 +1,8 @@
 import { setPlan, getPlan } from "./planner";
 import { synthesizeTTS } from "./tts";
 import { searchPexels } from "./pexels";
+import { renderMgToPng } from "./mg-render";
+import { ensureBgm } from "./bgm";
 import path from "path";
 import fs from "fs/promises";
 import fsSync from "fs";
@@ -120,32 +122,42 @@ async function runPipeline(projectId: string) {
   await Promise.all([...ttsTasks, ...searchTasks]);
   setProgress(projectId, { step: "mg", progress: 45, done: false });
 
-  // Step 2: MG 模板拷贝（W2 先用内置的2个模板，其余复用）
+  // Step 2: MG 模板准备 + Puppeteer 渲染为透明 PNG
   for (const s of plan.scenes) {
     if (s.mg) {
       const src = s.id === "03" ? "../../packages/hyperframes-templates/mg/scene03.html" : s.id === "09" ? "../../packages/hyperframes-templates/mg/scene09.html" : null;
+      let htmlPath = path.join(root, `mg_scene${s.id}.html`);
       if (src) {
-        const dest = path.join(root, `mg_scene${s.id}.html`);
         try {
           const srcAbs = path.join(process.cwd(), src);
-          await fs.copyFile(srcAbs, dest);
-          s.mg.htmlPath = dest;
-        } catch {}
+          await fs.copyFile(srcAbs, htmlPath);
+        } catch {
+          await fs.writeFile(htmlPath, genericMgHtml(s.narration), "utf8");
+        }
       } else {
-        // 通用卡片模板
-        const dest = path.join(root, `mg_scene${s.id}.html`);
-        await fs.writeFile(dest, genericMgHtml(s.narration), "utf8");
-        s.mg.htmlPath = dest;
+        await fs.writeFile(htmlPath, genericMgHtml(s.narration), "utf8");
+      }
+      s.mg.htmlPath = htmlPath;
+      // 真实渲染 PNG（若失败则保留 html 供回退）
+      try {
+        const pngPath = path.join(root, `mg_scene${s.id}.png`);
+        const rendered = await renderMgToPng(htmlPath, pngPath);
+        if (rendered && fsSync.existsSync(rendered)) {
+          s.mg.pngPath = rendered;
+          console.log(`[queue] MG PNG rendered ${s.id} -> ${rendered}`);
+        }
+      } catch (e) {
+        console.warn(`[mg] render failed ${s.id}`, e);
       }
     }
   }
   setProgress(projectId, { step: "render", progress: 70, done: false });
 
-  // Step 3: 为每分镜生成占位视频底 + 静音时长对齐
+  // Step 3: 为每分镜生成视频底 + MG 叠加
   for (const s of plan.scenes) {
+    const baseVideo = path.join(root, `scene${s.id}_base.mp4`);
     const sceneVideo = path.join(root, `scene${s.id}.mp4`);
     const durSec = (s.durationMs / 1000).toFixed(3);
-    // 底视频：纯色+纹理（避免 drawtext 中文无字体问题，W3再加字幕烧录）
     await execFileAsync(ffmpegBin, [
       "-y",
       "-f",
@@ -160,13 +172,63 @@ async function runPipeline(projectId: string) {
       "yuv420p",
       "-t",
       durSec,
-      sceneVideo,
+      baseVideo,
     ]);
+    // 若有 MG PNG，则叠加
+    if (s.mg?.pngPath && fsSync.existsSync(s.mg.pngPath)) {
+      try {
+        await execFileAsync(ffmpegBin, [
+          "-y",
+          "-i",
+          baseVideo,
+          "-i",
+          s.mg.pngPath,
+          "-filter_complex",
+          "[0:v][1:v]overlay=0:0:shortest=1,format=yuv420p",
+          "-c:v",
+          "libx264",
+          "-c:a",
+          "aac",
+          "-t",
+          durSec,
+          sceneVideo,
+        ]);
+      } catch (e) {
+        console.warn(`[queue] overlay failed ${s.id}, fallback to base`, e);
+        await fs.copyFile(baseVideo, sceneVideo);
+      }
+    } else {
+      await fs.copyFile(baseVideo, sceneVideo);
+    }
     s.sceneVideo = sceneVideo;
   }
-  setProgress(projectId, { step: "concat", progress: 90, done: false });
+  setProgress(projectId, { step: "concat", progress: 82, done: false });
 
-  // Step 4: 合成最终视频 + 混音
+  // 生成全片 SRT 字幕（用于烧录）
+  const srtPath = path.join(root, "subs.srt");
+  let cursorMs = 0;
+  const srtLines: string[] = [];
+  plan.scenes.forEach((s: any, idx: number) => {
+    const start = cursorMs;
+    const end = cursorMs + s.durationMs;
+    srtLines.push(`${idx + 1}\n${msToSrt(start)} --> ${msToSrt(end)}\n${s.narration.slice(0, 60)}\n`);
+    cursorMs = end;
+  });
+  await fs.writeFile(srtPath, srtLines.join("\n"), "utf8");
+  plan.srtPath = srtPath;
+
+  // BGM 生成（按总时长）
+  setProgress(projectId, { step: "bgm", progress: 88, done: false });
+  const totalSec = plan.scenes.reduce((a: number, s: any) => a + s.durationMs, 0) / 1000;
+  const bgmPath = path.join(root, "bgm.m4a");
+  try {
+    await ensureBgm(plan.scenes[0]?.bgm || "通用平和", bgmPath, totalSec);
+    plan.bgmPath = bgmPath;
+  } catch (e) {
+    console.warn("[bgm] failed", e);
+  }
+
+  // Step 4: 合成最终视频
   const listPath = path.join(root, "concat.txt");
   const concatContent = plan.scenes.map((s: any) => `file '${s.sceneVideo}'`).join("\n");
   await fs.writeFile(listPath, concatContent, "utf8");
@@ -174,12 +236,37 @@ async function runPipeline(projectId: string) {
   const finalVideo = path.join(root, "final.mp4");
   await execFileAsync(ffmpegBin, ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", finalVideo]);
 
-  // 混音：把每段 tts 按顺序 concat 成全片音频，再与视频合并
+  // 混音：TTS 全片 + BGM 混音
   const audioList = path.join(root, "audio_concat.txt");
   const audioConcat = plan.scenes.map((s: any) => `file '${s.ttsPath}'`).join("\n");
   await fs.writeFile(audioList, audioConcat, "utf8");
   const fullAudio = path.join(root, "full.m4a");
   await execFileAsync(ffmpegBin, ["-y", "-f", "concat", "-safe", "0", "-i", audioList, "-c", "copy", fullAudio]);
+
+  // 若有 BGM，则混音（TTS 音量 1.0，BGM 0.14）
+  let mixedAudio = fullAudio;
+  if (plan.bgmPath && fsSync.existsSync(plan.bgmPath)) {
+    const mixedPath = path.join(root, "mixed.m4a");
+    try {
+      await execFileAsync(ffmpegBin, [
+        "-y",
+        "-i",
+        fullAudio,
+        "-i",
+        plan.bgmPath,
+        "-filter_complex",
+        "[0:a]volume=1.0[a0];[1:a]volume=0.14[a1];[a0][a1]amix=inputs=2:duration=shortest:dropout_transition=2,volume=1.0",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        mixedPath,
+      ]);
+      mixedAudio = mixedPath;
+    } catch (e) {
+      console.warn("[bgm] mix failed, fallback to tts only", e);
+    }
+  }
 
   const finalWithAudio = path.join(root, "final_with_audio.mp4");
   await execFileAsync(ffmpegBin, [
@@ -187,7 +274,7 @@ async function runPipeline(projectId: string) {
     "-i",
     finalVideo,
     "-i",
-    fullAudio,
+    mixedAudio,
     "-c:v",
     "copy",
     "-c:a",
@@ -195,6 +282,28 @@ async function runPipeline(projectId: string) {
     "-shortest",
     finalWithAudio,
   ]);
+
+  // 尝试烧录字幕（若失败则保留无字幕版）
+  const finalBurned = path.join(root, "final_burned.mp4");
+  try {
+    await execFileAsync(ffmpegBin, [
+      "-y",
+      "-i",
+      finalWithAudio,
+      "-vf",
+      `subtitles=${srtPath}:force_style='FontName=PingFang SC,FontSize=22,PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,BackColour=&H80000000,BorderStyle=3,Outline=1,Shadow=0,MarginV=36'`,
+      "-c:a",
+      "copy",
+      finalBurned,
+    ]);
+    // 若成功，用烧录版替换
+    if (fsSync.existsSync(finalBurned) && fsSync.statSync(finalBurned).size > 1000) {
+      await fs.copyFile(finalBurned, finalWithAudio);
+      console.log("[queue] subtitles burned");
+    }
+  } catch (e) {
+    console.warn("[sub] burn failed, keep without subtitles", (e as any)?.message?.slice(0, 200));
+  }
 
   // 更新 plan 状态
   plan.status = "rendered";
@@ -204,6 +313,14 @@ async function runPipeline(projectId: string) {
   await fs.writeFile(path.join(root, "plan.json"), JSON.stringify(plan, null, 2));
   setProgress(projectId, { step: "done", progress: 100, done: true });
   console.log(`[queue] done ${projectId} -> ${finalWithAudio}`);
+}
+
+function msToSrt(ms: number): string {
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  const msRem = ms % 1000;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")},${String(msRem).padStart(3, "0")}`;
 }
 
 function escapeDrawText(s: string) {
