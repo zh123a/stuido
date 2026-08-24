@@ -7,11 +7,15 @@ const secret = new TextEncoder().encode(process.env.JWT_SECRET || "dev-jwt-secre
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isAdmin = pathname.startsWith("/admin") || pathname.startsWith("/api/admin");
-  const isProtectedApi = pathname.startsWith("/api/projects") || pathname.startsWith("/api/admin");
+  // 仅保护子路径，POST /api/projects 允许游客创建（兼容旧版）
+  const isProtectedApi =
+    pathname.startsWith("/api/admin") ||
+    (pathname.startsWith("/api/projects/") && pathname !== "/api/projects") ||
+    (pathname === "/api/projects" && req.method === "GET");
   const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register");
 
-  // 公开：首页、登录、注册、健康检查
-  if (pathname === "/" || isAuthPage || pathname.startsWith("/api/auth")) {
+  // 公开：首页、登录、注册、健康检查、创建项目
+  if (pathname === "/" || isAuthPage || pathname.startsWith("/api/auth") || (pathname === "/api/projects" && req.method === "POST")) {
     return NextResponse.next();
   }
 

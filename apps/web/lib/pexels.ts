@@ -1,7 +1,16 @@
 export type PexelsVideo = { id: number; url: string; image: string; duration: number; provider: "pexels" | "mock" };
 
 export async function searchPexels(query: string, perPage = 3): Promise<PexelsVideo[]> {
-  const key = process.env.PEXELS_API_KEY;
+  // 优先走 DB 通道（管理后台配置），再兜底 env
+  let key: string | undefined = process.env.PEXELS_API_KEY;
+  try {
+    const { getActiveChannel, getChannelKey } = await import("./llm-channel");
+    const ch = await getActiveChannel("pexels");
+    if (ch) {
+      const k = await getChannelKey(ch);
+      if (k.key) key = k.key;
+    }
+  } catch {}
   if (!key) {
     // mock：返回本地占位，后续渲染时用 ffmpeg 生成
     return Array.from({ length: perPage }).map((_, i) => ({

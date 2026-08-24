@@ -11,6 +11,7 @@ export default function HomePage() {
   const [llmProvider, setLlmProvider] = useState("deepseek");
   const [llmApiKey, setLlmApiKey] = useState("");
   const [showLlmConfig, setShowLlmConfig] = useState(false);
+  const [user, setUser] = useState<any>(null);
   const examples = [
     "热点 | 医保有药，医院没货？",
     "财经 | 长鑫上市，谁是最大赢家",
@@ -21,6 +22,12 @@ export default function HomePage() {
   useEffect(() => {
     setLlmApiKey(localStorage.getItem("stuido_llm_key") || "");
     setLlmProvider(localStorage.getItem("stuido_llm_provider") || "deepseek");
+    fetch("/api/auth/me").then(async (r) => {
+      if (r.ok) {
+        const d = await r.json();
+        if (d.user) setUser(d.user);
+      }
+    });
   }, []);
 
   function saveLlmConfig() {
@@ -67,9 +74,29 @@ export default function HomePage() {
           <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">花</span>
           Stuido
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 items-center">
           <span className="px-3 py-1 rounded-full bg-white/10 text-sm">标准版 · Hyperframes</span>
-          <span className="px-3 py-1 rounded-full bg-white/10 text-sm">我的会员</span>
+          {user ? (
+            <>
+              <span className="px-3 py-1 rounded-full bg-white/10 text-sm">{user.email} · {user.role}</span>
+              {user.role === "admin" && <a href="/admin" className="px-3 py-1 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm">管理后台</a>}
+              <button
+                onClick={async () => {
+                  await fetch("/api/auth/logout", { method: "POST" });
+                  setUser(null);
+                  localStorage.removeItem("stuido_llm_key");
+                }}
+                className="px-3 py-1 rounded-full bg-white/10 text-sm"
+              >
+                退出
+              </button>
+            </>
+          ) : (
+            <>
+              <a href="/login" className="px-3 py-1 rounded-full bg-white/10 text-sm">登录</a>
+              <a href="/register" className="px-3 py-1 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-sm">注册</a>
+            </>
+          )}
         </div>
       </header>
 

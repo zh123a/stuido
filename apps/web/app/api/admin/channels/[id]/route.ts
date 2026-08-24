@@ -41,7 +41,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  // 测试连通性：用该通道调一次 LLM (hello)
+  // 测试连通性：按 provider 选择探活方式
   try {
     await requireAdmin(req);
     const { id } = await params;
@@ -49,8 +49,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!ch) return NextResponse.json({ error: "not found" }, { status: 404 });
     const { decrypt } = await import("@/lib/crypto");
     const key = decrypt(ch.apiKeyEncrypted);
-    const base = ch.baseUrl || (ch.provider === "deepseek" ? "https://api.deepseek.com" : ch.provider === "ark" ? "https://ark.cn-beijing.volces.com/api/v3" : "https://api.openai.com/v1");
-    const model = ch.model || (ch.provider === "deepseek" ? "deepseek-chat" : "gpt-4o-mini");
+    if (["pexels", "pixabay"].includes(ch.provider)) {
+      const url = ch.provider === "pexels" ? "https://api.pexels.com/v1/search?query=nature&per_page=1" : `https://pixabay.com/api/?key=${key}&q=nature&per_page=3`;
+      const headers: any = ch.provider === "pexels" ? { Authorization: key } : {};
+      const res = await fetch(url, { headers });
+      const txt = await res.text();
+      return NextResponse.json({ ok: res.ok, status: res.status, body: txt.slice(0, 600) });
+    }
+    const base = ch.baseUrl || (ch.provider === "deepseek" ? "https://api.deepseek.com" : ch.provider === "ark" ? "https://ark.cn-beijing.volces.com/api/v3" : ch.provider === "dashscope" ? "https://dashscope.aliyuncs.com/compatible-mode/v1" : "https://api.openai.com/v1");
+    const model = ch.model || (ch.provider === "deepseek" ? "deepseek-chat" : ch.provider === "ark" ? "doubao-seed-1-6-251015" : ch.provider === "dashscope" ? "qwen-plus" : "gpt-4o-mini");
     const res = await fetch(`${base}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
