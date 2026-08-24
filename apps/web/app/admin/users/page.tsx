@@ -38,6 +38,31 @@ export default function AdminUsersPage() {
     if (res.ok) load();
   }
 
+  const [editUser, setEditUser] = useState<any>(null);
+  const [editRole, setEditRole] = useState("user");
+  const [editPassword, setEditPassword] = useState("");
+
+  async function saveEdit() {
+    if (!editUser) return;
+    const body: any = { role: editRole };
+    if (editPassword) body.password = editPassword;
+    const res = await fetch(`/api/admin/users/${editUser.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) alert(data.error || "更新失败");
+    else {
+      setEditUser(null);
+      setEditPassword("");
+      load();
+    }
+  }
+
+  async function delUser(id: string) {
+    if (!confirm("确定删除该用户？")) return;
+    const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
+    if (res.ok) load();
+    else alert("删除失败");
+  }
+
   return (
     <div>
       <h1 className="text-xl font-bold">用户管理</h1>
@@ -77,14 +102,35 @@ export default function AdminUsersPage() {
                   <span className={`px-2 py-1 rounded text-xs ${u.status === "active" ? "bg-green-500/20 text-green-300" : "bg-white/10"}`}>{u.status}</span>
                 </td>
                 <td className="p-3 text-center text-white/50">{new Date(u.createdAt).toLocaleString()}</td>
-                <td className="p-3 text-center">
-                  <button onClick={() => toggleStatus(u)} className="px-3 py-1 rounded bg-white/10 text-xs mr-1">{u.status === "active" ? "禁用" : "启用"}</button>
+                <td className="p-3 text-center flex gap-1 justify-center">
+                  <button onClick={() => { setEditUser(u); setEditRole(u.role); }} className="px-2 py-1 rounded bg-white/10 text-xs">编辑</button>
+                  <button onClick={() => toggleStatus(u)} className="px-2 py-1 rounded bg-white/10 text-xs">{u.status === "active" ? "禁用" : "启用"}</button>
+                  <button onClick={() => delUser(u.id)} className="px-2 py-1 rounded bg-red-500/20 text-red-300 text-xs">删除</button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {editUser && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setEditUser(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-[#1a1a1e] border border-white/10 p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-bold">编辑用户 · {editUser.email}</h3>
+            <div className="mt-4 space-y-3">
+              <select value={editRole} onChange={(e) => setEditRole(e.target.value)} className="w-full px-3 py-2 rounded-xl bg-[#0f0f12] border border-white/10 text-sm">
+                <option value="user">user</option>
+                <option value="admin">admin</option>
+              </select>
+              <input value={editPassword} onChange={(e) => setEditPassword(e.target.value)} placeholder="新密码（留空不改）" className="w-full px-3 py-2 rounded-xl bg-[#0f0f12] border border-white/10 text-sm" />
+              <div className="flex gap-2">
+                <button onClick={saveEdit} className="flex-1 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-sm">保存</button>
+                <button onClick={() => setEditUser(null)} className="px-4 py-2 rounded-xl bg-white/10 text-sm">取消</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

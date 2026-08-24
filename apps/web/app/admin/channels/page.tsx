@@ -37,6 +37,9 @@ export default function AdminChannelsPage() {
     setLoading(false);
   }
 
+  const [edit, setEdit] = useState<any>(null);
+  const [editForm, setEditForm] = useState({ name: "", baseUrl: "", model: "", weight: 1, rateLimit: 60, apiKey: "" });
+
   async function toggle(c: any) {
     await fetch(`/api/admin/channels/${c.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isActive: !c.isActive }) });
     load();
@@ -49,7 +52,23 @@ export default function AdminChannelsPage() {
   async function test(id: string) {
     const res = await fetch(`/api/admin/channels/${id}`, { method: "POST" });
     const data = await res.json();
-    alert(res.ok ? `连通性: ${data.status}\n${data.body?.slice(0, 200)}` : `失败: ${data.error || data.body}`);
+    alert(res.ok ? `连通性: ${data.status}\n${data.body?.slice(0, 300)}` : `失败: ${data.error || data.body}`);
+  }
+  function startEdit(c: any) {
+    setEdit(c);
+    setEditForm({ name: c.name, baseUrl: c.baseUrl || "", model: c.model || "", weight: c.weight, rateLimit: c.rateLimit, apiKey: "" });
+  }
+  async function saveEdit() {
+    if (!edit) return;
+    const body: any = { name: editForm.name, baseUrl: editForm.baseUrl, model: editForm.model, weight: editForm.weight, rateLimit: editForm.rateLimit };
+    if (editForm.apiKey) body.apiKey = editForm.apiKey;
+    const res = await fetch(`/api/admin/channels/${edit.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) alert(data.error || "更新失败");
+    else {
+      setEdit(null);
+      load();
+    }
   }
 
   return (
@@ -103,6 +122,7 @@ export default function AdminChannelsPage() {
                   <span className={`px-2 py-1 rounded text-xs ${c.isActive ? "bg-green-500/20 text-green-300" : "bg-white/10"}`}>{c.isActive ? "启用" : "停用"}</span>
                 </td>
                 <td className="p-3 text-center flex gap-1 justify-center">
+                  <button onClick={() => startEdit(c)} className="px-2 py-1 rounded bg-white/10 text-xs">编辑</button>
                   <button onClick={() => toggle(c)} className="px-2 py-1 rounded bg-white/10 text-xs">{c.isActive ? "停用" : "启用"}</button>
                   <button onClick={() => test(c.id)} className="px-2 py-1 rounded bg-white/10 text-xs">测试</button>
                   <button onClick={() => del(c.id)} className="px-2 py-1 rounded bg-red-500/20 text-red-300 text-xs">删除</button>
@@ -112,6 +132,28 @@ export default function AdminChannelsPage() {
           </tbody>
         </table>
       </div>
+
+      {edit && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setEdit(null)}>
+          <div className="w-full max-w-md rounded-2xl bg-[#1a1a1e] border border-white/10 p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-bold">编辑通道 · {edit.provider} / {edit.name}</h3>
+            <div className="mt-4 space-y-3">
+              <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="通道名称" className="w-full px-3 py-2 rounded-xl bg-[#0f0f12] border border-white/10 text-sm" />
+              <input value={editForm.baseUrl} onChange={(e) => setEditForm({ ...editForm, baseUrl: e.target.value })} placeholder="Base URL" className="w-full px-3 py-2 rounded-xl bg-[#0f0f12] border border-white/10 text-sm" />
+              <input value={editForm.model} onChange={(e) => setEditForm({ ...editForm, model: e.target.value })} placeholder="Model" className="w-full px-3 py-2 rounded-xl bg-[#0f0f12] border border-white/10 text-sm" />
+              <input value={editForm.apiKey} onChange={(e) => setEditForm({ ...editForm, apiKey: e.target.value })} placeholder="新 API Key（留空不改）" className="w-full px-3 py-2 rounded-xl bg-[#0f0f12] border border-white/10 text-sm" />
+              <div className="flex gap-2">
+                <input type="number" value={editForm.weight} onChange={(e) => setEditForm({ ...editForm, weight: parseInt(e.target.value) || 1 })} className="flex-1 px-3 py-2 rounded-xl bg-[#0f0f12] border border-white/10 text-sm" placeholder="权重" />
+                <input type="number" value={editForm.rateLimit} onChange={(e) => setEditForm({ ...editForm, rateLimit: parseInt(e.target.value) || 60 })} className="flex-1 px-3 py-2 rounded-xl bg-[#0f0f12] border border-white/10 text-sm" placeholder="限流" />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={saveEdit} className="flex-1 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-sm">保存</button>
+                <button onClick={() => setEdit(null)} className="px-4 py-2 rounded-xl bg-white/10 text-sm">取消</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
