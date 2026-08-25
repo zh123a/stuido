@@ -9,6 +9,7 @@ export default function HomePage() {
   const [voice, setVoice] = useState("zh-CN-YunxiNeural");
   const [aspect, setAspect] = useState("16:9");
   const [model, setModel] = useState("deepseek-chat");
+  const [textModels, setTextModels] = useState<{ model: string; name: string; provider: string }[]>([]);
   const [user, setUser] = useState<any>(null);
   const examples = [
     "热点 | 医保有药，医院没货？",
@@ -24,6 +25,18 @@ export default function HomePage() {
         if (d.user) setUser(d.user);
       }
     });
+    fetch("/api/models")
+      .then((r) => r.json())
+      .then((d) => {
+        const list = d?.grouped?.text || [];
+        if (Array.isArray(list) && list.length) {
+          setTextModels(list);
+          // 若当前 model 不在列表中，切换为第一个可用
+          const exists = list.some((m: any) => m.model === model);
+          if (!exists && list[0]?.model) setModel(list[0].model);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   async function handleCreate() {
@@ -121,14 +134,23 @@ export default function HomePage() {
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                className="bg-white/10 rounded-full px-3 py-1 text-white border border-white/10"
-                title="选择分镜生成模型"
+                className="bg-white/10 rounded-full px-3 py-1 text-white border border-white/10 max-w-[160px]"
+                title="选择分镜生成模型（后台可配置）"
               >
-                <option className="text-black" value="deepseek-chat">DeepSeek Chat</option>
-                <option className="text-black" value="deepseek-reasoner">DeepSeek Reasoner</option>
-                <option className="text-black" value="doubao-seed-1-6-251015">豆包 Seed 1.6</option>
-                <option className="text-black" value="gpt-4o-mini">GPT-4o mini</option>
-                <option className="text-black" value="qwen-plus">通义 Qwen Plus</option>
+                {textModels.length ? (
+                  textModels.map((m) => (
+                    <option key={m.model} className="text-black" value={m.model}>
+                      {m.name} ({m.model})
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option className="text-black" value="deepseek-chat">DeepSeek Chat</option>
+                    <option className="text-black" value="doubao-seed-1-6-251015">豆包 Seed 1.6</option>
+                    <option className="text-black" value="gpt-4o-mini">GPT-4o mini</option>
+                    <option className="text-black" value="qwen-plus">通义 Qwen Plus</option>
+                  </>
+                )}
               </select>
               <button
                 onClick={handleCreate}

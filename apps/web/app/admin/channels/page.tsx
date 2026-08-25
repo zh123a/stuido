@@ -2,19 +2,32 @@
 import { useEffect, useState } from "react";
 
 const providers = [
-  { v: "deepseek", l: "DeepSeek" },
-  { v: "ark", l: "火山方舟 Ark" },
-  { v: "openai", l: "OpenAI" },
-  { v: "dashscope", l: "阿里百炼 DashScope" },
-  { v: "agnes", l: "Agnes 视频 (agnes-video-2.5-flash)" },
-  { v: "pexels", l: "Pexels" },
-  { v: "pixabay", l: "Pixabay" },
+  { v: "deepseek", l: "DeepSeek", cat: "文字" },
+  { v: "ark", l: "火山方舟 Ark", cat: "文字" },
+  { v: "openai", l: "OpenAI", cat: "文字" },
+  { v: "dashscope", l: "阿里百炼 DashScope", cat: "文字" },
+  { v: "agnes", l: "Agnes 视频 (agnes-video-2.5-flash)", cat: "视频" },
+  { v: "pexels", l: "Pexels", cat: "视频" },
+  { v: "pixabay", l: "Pixabay", cat: "视频" },
+  { v: "azure", l: "Azure TTS", cat: "语音" },
 ];
+
+const catMap: Record<string, string> = {
+  deepseek: "text",
+  ark: "text",
+  openai: "text",
+  dashscope: "text",
+  agnes: "video",
+  pexels: "video",
+  pixabay: "video",
+  azure: "tts",
+};
 
 export default function AdminChannelsPage() {
   const [list, setList] = useState<any[]>([]);
   const [form, setForm] = useState({ provider: "deepseek", name: "", apiKey: "", baseUrl: "", model: "", weight: 1, rateLimit: 60 });
   const [loading, setLoading] = useState(false);
+  const [activeCat, setActiveCat] = useState<"all" | "text" | "video" | "tts">("all");
 
   async function load() {
     const res = await fetch("/api/admin/channels");
@@ -72,17 +85,35 @@ export default function AdminChannelsPage() {
     }
   }
 
+  const filtered = activeCat === "all" ? list : list.filter((c) => catMap[c.provider] === activeCat);
+
   return (
     <div>
       <h1 className="text-xl font-bold">接口通道 Key 管理</h1>
-      <p className="text-xs text-white/50 mt-1">按提供商分组，支持加权随机与故障转移；Key 加密存储，列表仅显示脱敏值。</p>
+      <p className="text-xs text-white/50 mt-1">按 文字 / 视频 / 语音 分类，支持加权随机与故障转移；Key 加密存储，列表仅显示脱敏值。</p>
+      <div className="mt-4 flex gap-2 text-xs">
+        {[
+          { k: "all", l: "全部" },
+          { k: "text", l: "文字" },
+          { k: "video", l: "视频" },
+          { k: "tts", l: "语音" },
+        ].map((c) => (
+          <button
+            key={c.k}
+            onClick={() => setActiveCat(c.k as any)}
+            className={`px-3 py-1 rounded-full border ${activeCat === c.k ? "bg-white text-black border-white" : "bg-white/5 border-white/10 text-white/70"}`}
+          >
+            {c.l}
+          </button>
+        ))}
+      </div>
 
       <div className="mt-6 rounded-2xl bg-[#1a1a1e] border border-white/10 p-4">
         <div className="text-sm font-bold">新增通道</div>
         <div className="grid grid-cols-2 gap-2 mt-3">
           <select value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} className="px-3 py-2 rounded-xl bg-[#0f0f12] border border-white/10 text-sm">
             {providers.map((p) => (
-              <option key={p.v} value={p.v}>{p.l}</option>
+              <option key={p.v} value={p.v}>[{p.cat}] {p.l}</option>
             ))}
           </select>
           <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="通道名称 (如 deepseek-主)" className="px-3 py-2 rounded-xl bg-[#0f0f12] border border-white/10 text-sm" />
@@ -102,6 +133,7 @@ export default function AdminChannelsPage() {
           <thead className="bg-white/5 text-white/60">
             <tr>
               <th className="p-3 text-left">提供商/名称</th>
+              <th className="p-3">分类</th>
               <th className="p-3">模型</th>
               <th className="p-3">Key(脱敏)</th>
               <th className="p-3">权重</th>
@@ -110,11 +142,14 @@ export default function AdminChannelsPage() {
             </tr>
           </thead>
           <tbody>
-            {list.map((c) => (
+            {filtered.map((c) => (
               <tr key={c.id} className="border-t border-white/10">
                 <td className="p-3">
                   <div className="font-medium">{c.provider}</div>
                   <div className="text-white/60 text-xs">{c.name}</div>
+                </td>
+                <td className="p-3 text-center">
+                  <span className="px-2 py-1 rounded bg-white/5 text-xs">{catMap[c.provider] === "text" ? "文字" : catMap[c.provider] === "video" ? "视频" : catMap[c.provider] === "tts" ? "语音" : c.provider}</span>
                 </td>
                 <td className="p-3 text-center text-xs">{c.model || "-"}</td>
                 <td className="p-3 text-center font-mono text-xs">{c.apiKeyMasked}</td>
