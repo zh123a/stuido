@@ -8,8 +8,9 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [voice, setVoice] = useState("zh-CN-YunxiNeural");
   const [aspect, setAspect] = useState("16:9");
-  const [model, setModel] = useState("deepseek-chat");
+  const [model, setModel] = useState("");
   const [textModels, setTextModels] = useState<{ model: string; name: string; provider: string }[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const examples = [
     "热点 | 医保有药，医院没货？",
@@ -25,18 +26,25 @@ export default function HomePage() {
         if (d.user) setUser(d.user);
       }
     });
+    setModelsLoading(true);
     fetch("/api/models")
       .then((r) => r.json())
       .then((d) => {
         const list = d?.grouped?.text || [];
+        setTextModels(Array.isArray(list) ? list : []);
         if (Array.isArray(list) && list.length) {
-          setTextModels(list);
-          // 若当前 model 不在列表中，切换为第一个可用
           const exists = list.some((m: any) => m.model === model);
           if (!exists && list[0]?.model) setModel(list[0].model);
+          else if (!model && list[0]?.model) setModel(list[0].model);
+        } else {
+          setModel("");
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        setTextModels([]);
+        setModel("");
+      })
+      .finally(() => setModelsLoading(false));
   }, []);
 
   async function handleCreate() {
@@ -134,28 +142,29 @@ export default function HomePage() {
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                className="bg-white/10 rounded-full px-3 py-1 text-white border border-white/10 max-w-[160px]"
-                title="选择分镜生成模型（后台可配置）"
+                className="bg-white/10 rounded-full px-3 py-1 text-white border border-white/10 max-w-[160px] disabled:opacity-50"
+                title="选择分镜生成模型（后台启用后显示）"
+                disabled={modelsLoading || textModels.length === 0}
               >
-                {textModels.length ? (
+                {modelsLoading ? (
+                  <option className="text-black">加载中...</option>
+                ) : textModels.length ? (
                   textModels.map((m) => (
                     <option key={m.model} className="text-black" value={m.model}>
                       {m.name} ({m.model})
                     </option>
                   ))
                 ) : (
-                  <>
-                    <option className="text-black" value="deepseek-chat">DeepSeek Chat</option>
-                    <option className="text-black" value="doubao-seed-1-6-251015">豆包 Seed 1.6</option>
-                    <option className="text-black" value="gpt-4o-mini">GPT-4o mini</option>
-                    <option className="text-black" value="qwen-plus">通义 Qwen Plus</option>
-                  </>
+                  <option className="text-black" value="">
+                    暂无可用模型
+                  </option>
                 )}
               </select>
               <button
                 onClick={handleCreate}
-                disabled={loading}
+                disabled={loading || !model || textModels.length === 0}
                 className="px-5 py-1 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium disabled:opacity-50"
+                title={!model || textModels.length === 0 ? "请联系管理员在后台启用模型" : ""}
               >
                 {loading ? "生成中..." : "✨ 创建"}
               </button>
@@ -163,7 +172,11 @@ export default function HomePage() {
           </div>
         </div>
 
-
+        {!modelsLoading && textModels.length === 0 && (
+          <div className="mt-4 w-full max-w-4xl px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200 text-center">
+            暂无可用文字模型，请联系管理员在 <a href="/admin/channels" className="underline">后台 → 接口通道</a> 启用模型后重试
+          </div>
+        )}
 
         <div className="mt-6 flex flex-wrap gap-2 max-w-4xl">
           {examples.map((t) => (
