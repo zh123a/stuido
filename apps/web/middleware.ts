@@ -26,7 +26,9 @@ export async function middleware(req: NextRequest) {
 
   if ((isAdmin || isProtectedApi) && !token) {
     if (isAdmin && !pathname.startsWith("/api/")) {
-      return NextResponse.redirect(new URL("/login", req.url));
+      const loginUrl = new URL("/login", req.url);
+      loginUrl.searchParams.set("next", pathname);
+      return NextResponse.redirect(loginUrl);
     }
     return NextResponse.json({ error: "未登录" }, { status: 401 });
   }
@@ -39,12 +41,19 @@ export async function middleware(req: NextRequest) {
         if (pathname.startsWith("/api/")) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
         return NextResponse.redirect(new URL("/", req.url));
       }
-      // 已登录访问 /login 则跳首页
-      if (isAuthPage) return NextResponse.redirect(new URL("/", req.url));
+      // 已登录访问 /login 则按 next 跳转
+      if (isAuthPage) {
+        const next = req.nextUrl.searchParams.get("next") || "/";
+        return NextResponse.redirect(new URL(next, req.url));
+      }
       return NextResponse.next();
     } catch {
       if (isAdmin || isProtectedApi) {
-        if (isAdmin && !pathname.startsWith("/api/")) return NextResponse.redirect(new URL("/login", req.url));
+        if (isAdmin && !pathname.startsWith("/api/")) {
+          const loginUrl = new URL("/login", req.url);
+          loginUrl.searchParams.set("next", pathname);
+          return NextResponse.redirect(loginUrl);
+        }
         return NextResponse.json({ error: "登录已过期" }, { status: 401 });
       }
     }

@@ -1,9 +1,11 @@
 "use client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const r = useRouter();
+  const sp = useSearchParams();
+  const next = sp.get("next") || "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
@@ -15,7 +17,15 @@ export default function RegisterPage() {
     const res = await fetch("/api/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) setErr(data.error || "注册失败");
-    else r.push("/");
+    else {
+      try {
+        const me = await fetch("/api/auth/me").then((x) => x.json());
+        if (me?.user?.role === "admin") (r.push as any)("/admin");
+        else (r.push as any)(next);
+      } catch {
+        (r.push as any)(next);
+      }
+    }
     setLoading(false);
   }
   return (
@@ -30,5 +40,13 @@ export default function RegisterPage() {
         <div className="mt-3 text-xs text-center text-white/40">已有账号？ <a href="/login" className="text-purple-400 underline">去登录</a></div>
       </form>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] text-white/50">加载中...</div>}>
+      <RegisterForm />
+    </Suspense>
   );
 }

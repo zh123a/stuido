@@ -7,12 +7,12 @@ const secret = new TextEncoder().encode(process.env.JWT_SECRET || "dev-jwt-secre
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
   const token = cookieStore.get("token")?.value;
-  if (!token) redirect("/login");
+  if (!token) redirect("/login?next=/admin");
   try {
     const { payload } = await jwtVerify(token, secret);
     if ((payload as any).role !== "admin") redirect("/");
   } catch {
-    redirect("/login");
+    redirect("/login?next=/admin");
   }
   return (
     <div className="min-h-screen flex bg-[#0a0a0a] text-white">
