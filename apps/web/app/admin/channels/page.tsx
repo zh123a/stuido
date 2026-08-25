@@ -6,6 +6,7 @@ const providers = [
   { v: "ark", l: "火山方舟 Ark" },
   { v: "openai", l: "OpenAI" },
   { v: "dashscope", l: "阿里百炼 DashScope" },
+  { v: "agnes", l: "Agnes 视频 (agnes-video-2.5-flash)" },
   { v: "pexels", l: "Pexels" },
   { v: "pixabay", l: "Pixabay" },
 ];

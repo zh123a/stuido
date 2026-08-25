@@ -56,6 +56,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const txt = await res.text();
       return NextResponse.json({ ok: res.ok, status: res.status, body: txt.slice(0, 600) });
     }
+    if (ch.provider === "agnes") {
+      const base = ch.baseUrl || "https://apihub.agnes-ai.com/v1";
+      const model = ch.model || "agnes-video-2.5-flash";
+      const res = await fetch(`${base.replace(/\/$/, "")}/videos`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model, prompt: "hello, test connectivity", seconds: "5", mode: "text", size: "720P", aspect_ratio: "16:9" }),
+      });
+      const txt = await res.text();
+      // Agnes 校验失败也返回 400，但连通性算 ok（能触达）
+      return NextResponse.json({ ok: res.ok || res.status === 400, status: res.status, body: txt.slice(0, 600) });
+    }
     const base = ch.baseUrl || (ch.provider === "deepseek" ? "https://api.deepseek.com" : ch.provider === "ark" ? "https://ark.cn-beijing.volces.com/api/v3" : ch.provider === "dashscope" ? "https://dashscope.aliyuncs.com/compatible-mode/v1" : "https://api.openai.com/v1");
     const model = ch.model || (ch.provider === "deepseek" ? "deepseek-chat" : ch.provider === "ark" ? "doubao-seed-1-6-251015" : ch.provider === "dashscope" ? "qwen-plus" : "gpt-4o-mini");
     const res = await fetch(`${base}/chat/completions`, {

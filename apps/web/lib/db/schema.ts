@@ -13,7 +13,7 @@ export const users = sqliteTable("users", {
 
 export const apiKeyChannels = sqliteTable("api_key_channels", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  provider: text("provider", { enum: ["deepseek", "ark", "openai", "dashscope", "pexels", "pixabay", "azure"] }).notNull(),
+  provider: text("provider", { enum: ["deepseek", "ark", "openai", "dashscope", "pexels", "pixabay", "azure", "agnes"] }).notNull(),
   name: text("name").notNull(),
   apiKeyEncrypted: text("api_key_encrypted").notNull(),
   baseUrl: text("base_url"),

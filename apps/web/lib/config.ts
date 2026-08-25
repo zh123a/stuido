@@ -12,6 +12,9 @@ const envSchema = z.object({
   ARK_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   PEXELS_API_KEY: z.string().optional(),
+  AGNES_API_KEY: z.string().optional(),
+  AGNES_BASE_URL: z.string().default("https://apihub.agnes-ai.com/v1"),
+  AGNES_MODEL: z.string().default("agnes-video-2.5-flash"),
   NEXT_PUBLIC_APP_URL: z.string().default("http://localhost:3000"),
 });
 
@@ -27,6 +30,9 @@ export const config = envSchema.parse({
   ARK_API_KEY: process.env.ARK_API_KEY,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   PEXELS_API_KEY: process.env.PEXELS_API_KEY,
+  AGNES_API_KEY: process.env.AGNES_API_KEY,
+  AGNES_BASE_URL: process.env.AGNES_BASE_URL,
+  AGNES_MODEL: process.env.AGNES_MODEL,
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
 });
 
