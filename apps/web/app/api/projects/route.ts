@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { script, voice = "zh-CN-YunxiNeural", aspect = "16:9", mode = "standard", llmApiKey, llmProvider, llmBaseUrl } = body;
+    const { script, voice = "zh-CN-YunxiNeural", aspect = "16:9", mode = "standard", llmApiKey, llmProvider, llmBaseUrl, model } = body;
     if (!script || typeof script !== "string" || script.trim().length < 10) {
       return NextResponse.json({ error: "口播稿至少10字" }, { status: 400 });
     }
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       // 允许未登录创建（兼容旧版），但标记为 mock 游客；若需强制登录，取消下一行并返回 401
       // return NextResponse.json({ error: e.message }, { status: e.status || 401 });
     }
-    // 临时注入前端传来的 Key（仅本次请求有效）
+    // 兼容旧版：临时注入前端传来的 Key（仅本次请求有效）
     if (llmApiKey) {
       if (llmProvider === "ark") process.env.ARK_API_KEY = llmApiKey;
       else if (llmProvider === "openai") process.env.OPENAI_API_KEY = llmApiKey;
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
         else process.env.DEEPSEEK_BASE_URL = llmBaseUrl;
       }
     }
-    const plan = await createPlan({ script, voice, aspect, mode });
+    const plan = await createPlan({ script, voice, aspect, mode, model });
     // 落库 projects（带 owner）
     try {
       await db.insert(projects).values({

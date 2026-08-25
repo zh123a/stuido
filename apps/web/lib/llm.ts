@@ -1,11 +1,11 @@
-export type LlmPlanInput = { script: string; voice: string; aspect: string };
+export type LlmPlanInput = { script: string; voice: string; aspect: string; model?: string };
 
 export async function callDeepSeekForPlan(input: LlmPlanInput): Promise<any | null> {
-  // 优先走 DB 通道（管理后台配置），再兜底 env
+  // 优先走 DB 通道（管理后台配置，根据用户选择的 model 精确匹配），再兜底 env
   let resolved: any = null;
   try {
     const { resolveLlmChannel } = await import("./llm-channel");
-    resolved = await resolveLlmChannel();
+    resolved = await resolveLlmChannel(undefined, (input as any).model);
   } catch {}
   if (!resolved) {
     const providers = [
@@ -22,7 +22,7 @@ export async function callDeepSeekForPlan(input: LlmPlanInput): Promise<any | nu
   }
   const key: string = (resolved as any).key;
   const base: string = (resolved as any).baseUrl || (resolved as any).base;
-  const model: string = (resolved as any).model;
+  const model: string = (input as any).model || (resolved as any).model;
   const type: string = (resolved as any).type;
   if (!key) return { error: "通道 Key 为空" };
   if (!key) return null;

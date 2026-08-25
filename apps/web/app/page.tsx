@@ -8,9 +8,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [voice, setVoice] = useState("zh-CN-YunxiNeural");
   const [aspect, setAspect] = useState("16:9");
-  const [llmProvider, setLlmProvider] = useState("deepseek");
-  const [llmApiKey, setLlmApiKey] = useState("");
-  const [showLlmConfig, setShowLlmConfig] = useState(false);
+  const [model, setModel] = useState("deepseek-chat");
   const [user, setUser] = useState<any>(null);
   const examples = [
     "热点 | 医保有药，医院没货？",
@@ -20,8 +18,6 @@ export default function HomePage() {
   ];
 
   useEffect(() => {
-    setLlmApiKey(localStorage.getItem("stuido_llm_key") || "");
-    setLlmProvider(localStorage.getItem("stuido_llm_provider") || "deepseek");
     fetch("/api/auth/me").then(async (r) => {
       if (r.ok) {
         const d = await r.json();
@@ -29,12 +25,6 @@ export default function HomePage() {
       }
     });
   }, []);
-
-  function saveLlmConfig() {
-    localStorage.setItem("stuido_llm_key", llmApiKey);
-    localStorage.setItem("stuido_llm_provider", llmProvider);
-    setShowLlmConfig(false);
-  }
 
   async function handleCreate() {
     if (!script.trim()) return alert("请先输入口播稿");
@@ -49,15 +39,11 @@ export default function HomePage() {
           aspect,
           mode: "standard",
           preference: "B-素材混合MG",
-          llmApiKey: llmApiKey || undefined,
-          llmProvider,
+          model,
         }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        if (data.needLlmConfig) setShowLlmConfig(true);
-        throw new Error(data.error || "创建失败");
-      }
+      if (!res.ok) throw new Error(data.error || "创建失败");
       router.push(`/project/${data.projectId}/plan`);
     } catch (e: any) {
       alert(e.message);
@@ -84,7 +70,6 @@ export default function HomePage() {
                 onClick={async () => {
                   await fetch("/api/auth/logout", { method: "POST" });
                   setUser(null);
-                  localStorage.removeItem("stuido_llm_key");
                 }}
                 className="px-3 py-1 rounded-full bg-white/10 text-sm"
               >
@@ -121,7 +106,7 @@ export default function HomePage() {
           />
           <div className="mt-2 flex items-center justify-between text-xs text-white/40">
             <span>{script.length} / 10000</span>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <select value={voice} onChange={(e) => setVoice(e.target.value)} className="bg-white/10 rounded-full px-3 py-1 text-white">
                 <option className="text-black" value="zh-CN-YunxiNeural">科普男主1</option>
                 <option className="text-black" value="zh-CN-XiaoxiaoNeural">知性女主</option>
@@ -131,8 +116,20 @@ export default function HomePage() {
                 <option className="text-black" value="16:9">16:9</option>
                 <option className="text-black" value="9:16">9:16</option>
               </select>
-              <span className="px-3 py-1 rounded-full bg-white/10">标准模式</span>
-              <span className="px-3 py-1 rounded-full bg-white/10">偏好01</span>
+              <span className="px-3 py-1 rounded-full bg-white/10 hidden sm:inline">标准模式</span>
+              <span className="px-3 py-1 rounded-full bg-white/10 hidden sm:inline">偏好01</span>
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="bg-white/10 rounded-full px-3 py-1 text-white border border-white/10"
+                title="选择分镜生成模型"
+              >
+                <option className="text-black" value="deepseek-chat">DeepSeek Chat</option>
+                <option className="text-black" value="deepseek-reasoner">DeepSeek Reasoner</option>
+                <option className="text-black" value="doubao-seed-1-6-251015">豆包 Seed 1.6</option>
+                <option className="text-black" value="gpt-4o-mini">GPT-4o mini</option>
+                <option className="text-black" value="qwen-plus">通义 Qwen Plus</option>
+              </select>
               <button
                 onClick={handleCreate}
                 disabled={loading}
@@ -144,41 +141,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="mt-4 w-full max-w-4xl flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2 text-white/50">
-            <span>AI 分镜：</span>
-            <span className={`px-2 py-1 rounded-full text-xs ${llmApiKey ? "bg-green-500/20 text-green-300" : "bg-amber-500/20 text-amber-300"}`}>
-              {llmApiKey ? `已配置 ${llmProvider}` : "未配置（需 LLM）"}
-            </span>
-            <span className="text-white/30 hidden sm:inline">通读全文后由 AI 重写分镜，非本地分词</span>
-          </div>
-          <button onClick={() => setShowLlmConfig(true)} className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white/70">
-            配置 LLM
-          </button>
-        </div>
 
-        {showLlmConfig && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowLlmConfig(false)}>
-            <div className="w-full max-w-md rounded-2xl bg-[#1a1a1e] border border-white/10 p-6" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-sm font-bold">配置 AI 分镜 LLM</h3>
-              <p className="mt-2 text-xs text-white/60">分镜脚本必须由 AI 通读全文后撰写，不再使用本地分词。请配置任意 OpenAI 兼容的 LLM。</p>
-              <div className="mt-4 space-y-3">
-                <select value={llmProvider} onChange={(e) => setLlmProvider(e.target.value)} className="w-full bg-[#0f0f12] border border-white/10 rounded-xl px-3 py-2 text-sm text-white">
-                  <option value="deepseek">DeepSeek (deepseek-chat)</option>
-                  <option value="ark">火山方舟 Ark (doubao-seed-1-6)</option>
-                  <option value="openai">OpenAI (gpt-4o-mini)</option>
-                  <option value="dashscope">阿里百炼 DashScope (qwen-plus)</option>
-                </select>
-                <input value={llmApiKey} onChange={(e) => setLlmApiKey(e.target.value)} placeholder="粘贴 API Key (sk-...)" className="w-full bg-[#0f0f12] border border-white/10 rounded-xl px-3 py-2 text-sm placeholder:text-white/30" />
-                <p className="text-[11px] text-white/40">Key 仅存于浏览器 localStorage，也可在服务端 .env 配置 DEEPSEEK_API_KEY / ARK_API_KEY 等后重启。</p>
-                <div className="flex gap-2">
-                  <button onClick={saveLlmConfig} className="flex-1 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-sm font-medium">保存</button>
-                  <button onClick={() => setShowLlmConfig(false)} className="px-4 py-2 rounded-xl bg-white/10 text-sm">取消</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         <div className="mt-6 flex flex-wrap gap-2 max-w-4xl">
           {examples.map((t) => (

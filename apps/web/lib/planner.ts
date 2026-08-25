@@ -62,7 +62,7 @@ export function setPlan(id: string, v: any) {
   } catch {}
 }
 
-export type PlanInput = { script: string; voice: string; aspect: string; mode: string };
+export type PlanInput = { script: string; voice: string; aspect: string; mode: string; model?: string };
 
 export async function createPlan(input: PlanInput) {
   const projectId = randomUUID();
@@ -72,7 +72,7 @@ export async function createPlan(input: PlanInput) {
   let llmTitle: string | null = null;
   let llmError: string | null = null;
   try {
-    const llm = await callDeepSeekForPlan({ script: input.script, voice: input.voice, aspect: input.aspect });
+    const llm = await callDeepSeekForPlan({ script: input.script, voice: input.voice, aspect: input.aspect, model: input.model });
     if (llm && Array.isArray(llm.scenes) && llm.scenes.length >= 4) {
       llmScenes = llm.scenes;
       llmTitle = llm.title;
