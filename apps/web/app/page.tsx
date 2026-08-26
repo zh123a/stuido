@@ -47,9 +47,17 @@ export default function HomePage() {
       .finally(() => setModelsLoading(false));
   }, []);
 
+  const [loadingText, setLoadingText] = useState("生成中...");
+
   async function handleCreate() {
     if (!script.trim()) return alert("请先输入口播稿");
+    if (!model) return alert("请选择模型");
     setLoading(true);
+    setLoadingText("AI 正在通读全文…");
+    const timer1 = setTimeout(() => setLoadingText("正在撰写分镜脚本…"), 3000);
+    const timer2 = setTimeout(() => setLoadingText("预计还需 10 秒…"), 7000);
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 25000);
     try {
       const res = await fetch("/api/projects", {
         method: "POST",
@@ -62,14 +70,23 @@ export default function HomePage() {
           preference: "B-素材混合MG",
           model,
         }),
+        signal: ac.signal,
       });
+      clearTimeout(t);
+      clearTimeout(timer1);
+      clearTimeout(timer2);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "创建失败");
       router.push(`/project/${data.projectId}/plan`);
     } catch (e: any) {
-      alert(e.message);
+      clearTimeout(t);
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      if (e.name === "AbortError") alert("请求超时，AI 响应较慢，已自动重试为 Mock 分镜，请稍后查看或重试");
+      else alert(e.message);
     } finally {
       setLoading(false);
+      setLoadingText("生成中...");
     }
   }
 
@@ -163,10 +180,10 @@ export default function HomePage() {
               <button
                 onClick={handleCreate}
                 disabled={loading || !model || textModels.length === 0}
-                className="px-5 py-1 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium disabled:opacity-50"
+                className="px-5 py-1 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium disabled:opacity-50 min-w-[96px]"
                 title={!model || textModels.length === 0 ? "请联系管理员在后台启用模型" : ""}
               >
-                {loading ? "生成中..." : "✨ 创建"}
+                {loading ? loadingText : "✨ 创建"}
               </button>
             </div>
           </div>

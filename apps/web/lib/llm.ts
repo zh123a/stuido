@@ -38,14 +38,25 @@ export async function callDeepSeekForPlan(input: LlmPlanInput): Promise<any | nu
     };
     // DeepSeek / OpenAI / DashScope 支持 json_object，Ark 需用普通文本
     if (type !== "ark") body.response_format = { type: "json_object" };
-    const res = await fetch(`${base}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify(body),
-    });
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 12000);
+    let res: Response;
+    try {
+      res = await fetch(`${base}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify(body),
+        signal: ac.signal,
+      });
+    } catch (e: any) {
+      clearTimeout(t);
+      if (e.name === "AbortError") return { error: `${type} 调用超时 12s，已自动回退` };
+      throw e;
+    }
+    clearTimeout(t);
     if (!res.ok) {
       const txt = await res.text();
       console.warn(`[llm] ${type} error`, res.status, txt.slice(0, 600));
