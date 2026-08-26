@@ -159,8 +159,31 @@ async function runPipeline(projectId: string) {
     const sceneVideo = path.join(root, `scene${s.id}.mp4`);
     const durSec = (s.durationMs / 1000).toFixed(3);
     let baseOk = false;
+    // 3a-0. AI 视频素材：选择了 Agnes 视频模型时，按分镜文生视频
+    if ((plan.videoModel || "").includes("agnes")) {
+      try {
+        const { agnesTextToVideoUrl } = await import("./agnes");
+        const url = await agnesTextToVideoUrl(`${s.search.query}，${s.narration.slice(0, 40)}，电影级运镜`, Math.round(s.durationMs / 1000));
+        if (url) {
+          const raw = path.join(root, `footage_raw_${s.id}.mp4`);
+          const res = await fetch(url);
+          if (res.ok) {
+            await fs.writeFile(raw, Buffer.from(await res.arrayBuffer()));
+            await execFileAsync(ffmpegBin, [
+              "-y", "-i", raw, "-t", durSec,
+              "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30",
+              "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", baseVideo,
+            ]);
+            baseOk = true;
+            s.footage = { ...s.footage, url, provider: "agnes" };
+          }
+        }
+      } catch (e: any) {
+        console.warn(`[queue] agnes video failed ${s.id}:`, String(e.message || e).slice(0, 200));
+      }
+    }
     // 3a. 真实素材：Pexels 等 http 素材下载并裁剪
-    if (s.footage?.url && /^https?:\/\//.test(s.footage.url)) {
+    if (!baseOk && s.footage?.url && /^https?:\/\//.test(s.footage.url)) {
       try {
         const raw = path.join(root, `footage_raw_${s.id}.mp4`);
         const { downloadIfReal } = await import("./pexels");

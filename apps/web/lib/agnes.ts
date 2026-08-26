@@ -83,6 +83,14 @@ export async function agnesQueryVideo(videoId: string, modelName = "agnes-video-
   return data;
 }
 
+export async function agnesTextToVideoUrl(prompt: string, seconds: number): Promise<string | null> {
+  const created = await agnesCreateVideo({ prompt, seconds: String(Math.min(12, Math.max(4, seconds))), mode: "text", aspect_ratio: "16:9" });
+  const vid = created.video_id || created.id || created.task_id;
+  if (!vid) throw new Error("Agnes 未返回 video_id");
+  const done: any = await agnesPollUntilDone(vid, { timeoutMs: 150000 });
+  return done.video_url || done.url || done.result?.video_url || done.output?.video_url || done.data?.video_url || null;
+}
+
 export async function agnesPollUntilDone(videoId: string, opts?: { intervalMs?: number; timeoutMs?: number; modelName?: string }) {
   const interval = opts?.intervalMs ?? 1500;
   const timeout = opts?.timeoutMs ?? 180000;

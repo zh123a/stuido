@@ -7,6 +7,8 @@ export default function PlanPage() {
   const router = useRouter();
   const [plan, setPlan] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [videoModels, setVideoModels] = useState<{ model: string; name: string; provider: string }[]>([]);
+  const [videoModel, setVideoModel] = useState("placeholder");
 
   useEffect(() => {
     // W1 简化：从 renders/plan.json 取，实际走 API
@@ -15,6 +17,14 @@ export default function PlanPage() {
       if (r.ok) setPlan(await r.json());
       setLoading(false);
     });
+    fetch("/api/models")
+      .then((r) => r.json())
+      .then((d) => {
+        const list = d?.grouped?.video || [];
+        setVideoModels(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {})
+      .finally(() => setVideoModel((m) => m || "placeholder"));
   }, [id]);
 
   if (loading) return <div className="p-10 text-white/60">加载创作规划书中...</div>;
@@ -74,13 +84,35 @@ export default function PlanPage() {
             <div className="flex justify-between"><span className="text-white/60">旁白配音</span><span>0</span></div>
             <div className="flex justify-between font-bold pt-2 border-t border-white/10"><span>总预估消耗</span><span className="text-purple-400">{plan.metrics.cost}</span></div>
           </div>
+          <div className="mt-6">
+            <div className="text-xs text-white/60 mb-1">视频模型（画面素材来源）</div>
+            <select
+              value={videoModel}
+              onChange={(e) => setVideoModel(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-[#0f0f12] border border-white/10 text-sm"
+            >
+              <option value="placeholder">占位空镜（免费·最快）</option>
+              {videoModels.map((m) => (
+                <option key={`${m.provider}-${m.model}`} value={m.model}>
+                  {m.name}（{m.model}）
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-white/40">
+              {videoModel.includes("agnes") ? "Agnes 文生视频：按分镜生成 AI 实拍画面，速度较慢" : videoModel === "placeholder" ? "使用动态渐变空镜占位，配置 Pexels/Agnes 通道后可换真实素材" : "使用所选通道素材"}
+            </p>
+          </div>
           <button
             onClick={async () => {
-              const r = await fetch(`/api/projects/${id}/confirm`, { method: "POST" });
+              const r = await fetch(`/api/projects/${id}/confirm`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ videoModel }),
+              });
               if (r.ok) router.push(`/project/${id}/edit`);
               else alert("确认失败");
             }}
-            className="mt-6 w-full py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 font-bold"
+            className="mt-4 w-full py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 font-bold"
           >
             {plan.metrics.cost} 确认并继续
           </button>

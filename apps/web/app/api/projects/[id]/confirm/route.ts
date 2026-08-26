@@ -25,6 +25,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (plan.status === "rendering" || plan.status === "queued") {
     return NextResponse.json({ ok: true, status: plan.status });
   }
+  // 视频模型选择（前台规划书页选择，默认占位素材）
+  try {
+    const body = await req.json().catch(() => ({}));
+    if (body?.videoModel) plan.videoModel = String(body.videoModel);
+  } catch {}
   plan.status = "queued";
   setPlan(id, plan);
   try {
