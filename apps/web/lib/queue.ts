@@ -153,44 +153,49 @@ async function runPipeline(projectId: string) {
   }
   setProgress(projectId, { step: "render", progress: 70, done: false });
 
-  // Step 3: 为每分镜生成视频底 + MG 叠加
+  // Step 3: 为每分镜生成视频底（真实素材优先，否则动态渐变占位）+ MG 叠加
   for (const s of plan.scenes) {
     const baseVideo = path.join(root, `scene${s.id}_base.mp4`);
     const sceneVideo = path.join(root, `scene${s.id}.mp4`);
     const durSec = (s.durationMs / 1000).toFixed(3);
-    await execFileAsync(ffmpegBin, [
-      "-y",
-      "-f",
-      "lavfi",
-      "-i",
-      `color=c=0x1a2744:s=1920x1080:r=30:d=${durSec}`,
-      "-vf",
-      `drawbox=x=360:y=480:w=1200:h=140:color=white@0.08:t=fill`,
-      "-c:v",
-      "libx264",
-      "-pix_fmt",
-      "yuv420p",
-      "-t",
-      durSec,
-      baseVideo,
-    ]);
-    // 若有 MG PNG，则叠加
+    let baseOk = false;
+    // 3a. 真实素材：Pexels 等 http 素材下载并裁剪
+    if (s.footage?.url && /^https?:\/\//.test(s.footage.url)) {
+      try {
+        const raw = path.join(root, `footage_raw_${s.id}.mp4`);
+        const { downloadIfReal } = await import("./pexels");
+        await downloadIfReal({ id: s.footage.id, url: s.footage.url, image: s.footage.image, duration: s.footage.duration, provider: "pexels" }, raw);
+        await execFileAsync(ffmpegBin, [
+          "-y", "-i", raw, "-t", durSec,
+          "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30",
+          "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", baseVideo,
+        ]);
+        baseOk = true;
+      } catch (e) {
+        console.warn(`[queue] footage download failed ${s.id}`, e);
+      }
+    }
+    // 3b. 占位：动态渐变 + 网格，模拟实拍空镜
+    if (!baseOk) {
+      await execFileAsync(ffmpegBin, [
+        "-y",
+        "-f", "lavfi",
+        "-i", `gradients=s=1920x1080:d=${durSec}:speed=0.06:c0=0x101c3a:c1=0x1a2744:c2=0x0f3460:c3=0x16213e:nb_colors=4`,
+        "-vf", `drawgrid=w=240:h=135:t=1:c=white@0.05,drawbox=x=360:y=480:w=1200:h=140:color=white@0.06:t=fill`,
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-t", durSec,
+        baseVideo,
+      ]);
+    }
+    // 3c. MG PNG 叠加：PNG 单帧需 -loop 1，禁止 shortest（否则输出仅1帧）
     if (s.mg?.pngPath && fsSync.existsSync(s.mg.pngPath)) {
       try {
         await execFileAsync(ffmpegBin, [
           "-y",
-          "-i",
-          baseVideo,
-          "-i",
-          s.mg.pngPath,
-          "-filter_complex",
-          "[0:v][1:v]overlay=0:0:shortest=1,format=yuv420p",
-          "-c:v",
-          "libx264",
-          "-c:a",
-          "aac",
-          "-t",
-          durSec,
+          "-i", baseVideo,
+          "-loop", "1", "-i", s.mg.pngPath,
+          "-filter_complex", "[0:v][1:v]overlay=0:0:format=auto,format=yuv420p",
+          "-c:v", "libx264",
+          "-t", durSec,
           sceneVideo,
         ]);
       } catch (e) {
