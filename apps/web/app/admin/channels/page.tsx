@@ -6,6 +6,7 @@ const providers = [
   { v: "ark", l: "火山方舟 Ark", cat: "文字" },
   { v: "openai", l: "OpenAI", cat: "文字" },
   { v: "dashscope", l: "阿里百炼 DashScope", cat: "文字" },
+  { v: "agnes", l: "Agnes 文字 (agnes-2.5-flash)", cat: "文字" },
   { v: "agnes", l: "Agnes 视频 (agnes-video-2.5-flash)", cat: "视频" },
   { v: "pexels", l: "Pexels", cat: "视频" },
   { v: "pixabay", l: "Pixabay", cat: "视频" },
@@ -113,7 +114,7 @@ export default function AdminChannelsPage() {
         <div className="grid grid-cols-2 gap-2 mt-3">
           <select value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} className="px-3 py-2 rounded-xl bg-[#0f0f12] border border-white/10 text-sm">
             {providers.map((p) => (
-              <option key={p.v} value={p.v}>[{p.cat}] {p.l}</option>
+              <option key={`${p.v}-${p.l}`} value={p.v}>[{p.cat}] {p.l}</option>
             ))}
           </select>
           <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="通道名称 (如 deepseek-主)" className="px-3 py-2 rounded-xl bg-[#0f0f12] border border-white/10 text-sm" />

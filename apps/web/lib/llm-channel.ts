@@ -15,8 +15,15 @@ export async function getActiveChannel(provider?: string, preferredModel?: strin
   } else if (provider) {
     filtered = all.filter((c) => c.provider === provider);
   }
-  // 仅保留 LLM 类型通道
-  filtered = filtered.filter((c) => ["deepseek", "ark", "openai", "dashscope"].includes(c.provider));
+  // 仅保留 LLM 类型通道（含 Agnes 文字模型）
+  filtered = filtered.filter((c) => ["deepseek", "ark", "openai", "dashscope", "agnes"].includes(c.provider));
+  // 对 agnes 做模型级区分：agnes-video 为视频，agnes-2.5-flash 为文字
+  if (preferredModel && preferredModel.includes("agnes")) {
+    // do not filter out, keep as is
+  } else if (!preferredModel) {
+    // 未指定模型时，过滤掉视频模型 agnes-video
+    filtered = filtered.filter((c) => !(c.provider === "agnes" && (c.model || "").includes("video")));
+  }
   if (!filtered.length) return null;
   // 加权随机
   const pool: Channel[] = [];
@@ -59,6 +66,7 @@ export async function resolveLlmChannel(provider?: string, preferredModel?: stri
     ark: { key: process.env.ARK_API_KEY, base: process.env.ARK_BASE_URL, model: process.env.ARK_MODEL },
     openai: { key: process.env.OPENAI_API_KEY, base: process.env.OPENAI_BASE_URL, model: process.env.OPENAI_MODEL },
     dashscope: { key: process.env.DASHSCOPE_API_KEY, base: process.env.DASHSCOPE_BASE_URL, model: process.env.DASHSCOPE_MODEL },
+    agnes: { key: process.env.AGNES_API_KEY, base: process.env.AGNES_BASE_URL, model: "agnes-2.5-flash" },
   };
   const p = provider || "deepseek";
   const e = envMap[p] || envMap.deepseek;
@@ -74,5 +82,6 @@ function inferProviderFromModel(model: string): string | undefined {
   if (m.includes("doubao") || m.includes("seed")) return "ark";
   if (m.includes("gpt") || m.includes("openai")) return "openai";
   if (m.includes("qwen") || m.includes("dashscope")) return "dashscope";
+  if (m.includes("agnes")) return "agnes";
   return undefined;
 }

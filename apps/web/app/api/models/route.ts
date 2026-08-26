@@ -7,18 +7,27 @@ const CATEGORY_MAP: Record<string, "text" | "video" | "tts" | "other"> = {
   ark: "text",
   openai: "text",
   dashscope: "text",
-  agnes: "video",
+  agnes: "video", // 默认视频，文字模型会在下面按 model 覆盖
   pexels: "video",
   pixabay: "video",
   azure: "tts",
 };
+
+function categorize(r: any): "text" | "video" | "tts" | "other" {
+  if (r.provider === "agnes") {
+    const m = (r.model || "").toLowerCase();
+    if (m.includes("video")) return "video";
+    return "text"; // agnes-2.5-flash 为文字
+  }
+  return CATEGORY_MAP[r.provider] || "other";
+}
 
 export async function GET() {
   try {
     const rows = await db.select().from(apiKeyChannels).where(eq(apiKeyChannels.isActive, true as any));
     const grouped: Record<string, any[]> = { text: [], video: [], tts: [], other: [] };
     for (const r of rows) {
-      const cat = CATEGORY_MAP[r.provider] || "other";
+      const cat = categorize(r);
       grouped[cat].push({
         id: r.id,
         provider: r.provider,
