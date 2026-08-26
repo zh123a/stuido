@@ -2,15 +2,15 @@
 import { useEffect, useState } from "react";
 
 const providers = [
-  { v: "deepseek", l: "DeepSeek", cat: "文字" },
-  { v: "ark", l: "火山方舟 Ark", cat: "文字" },
-  { v: "openai", l: "OpenAI", cat: "文字" },
-  { v: "dashscope", l: "阿里百炼 DashScope", cat: "文字" },
-  { v: "agnes", l: "Agnes 文字 (agnes-2.5-flash)", cat: "文字" },
-  { v: "agnes", l: "Agnes 视频 (agnes-video-2.5-flash)", cat: "视频" },
-  { v: "pexels", l: "Pexels", cat: "视频" },
-  { v: "pixabay", l: "Pixabay", cat: "视频" },
-  { v: "azure", l: "Azure TTS", cat: "语音" },
+  { v: "deepseek", l: "DeepSeek", cat: "文字", provider: "deepseek", defModel: "deepseek-chat" },
+  { v: "ark", l: "火山方舟 Ark", cat: "文字", provider: "ark", defModel: "doubao-seed-1-6-251015" },
+  { v: "openai", l: "OpenAI", cat: "文字", provider: "openai", defModel: "gpt-4o-mini" },
+  { v: "dashscope", l: "阿里百炼 DashScope", cat: "文字", provider: "dashscope", defModel: "qwen-plus" },
+  { v: "agnes-text", l: "Agnes 文字 (agnes-2.5-flash)", cat: "文字", provider: "agnes", defModel: "agnes-2.5-flash" },
+  { v: "agnes-video", l: "Agnes 视频 (agnes-video-2.5-flash)", cat: "视频", provider: "agnes", defModel: "agnes-video-2.5-flash" },
+  { v: "pexels", l: "Pexels", cat: "视频", provider: "pexels", defModel: "pexels" },
+  { v: "pixabay", l: "Pixabay", cat: "视频", provider: "pixabay", defModel: "pixabay" },
+  { v: "azure", l: "Azure TTS", cat: "语音", provider: "azure", defModel: "zh-CN-YunxiNeural" },
 ];
 
 const catMap: Record<string, string> = {
@@ -18,15 +18,21 @@ const catMap: Record<string, string> = {
   ark: "text",
   openai: "text",
   dashscope: "text",
-  agnes: "video",
   pexels: "video",
   pixabay: "video",
   azure: "tts",
 };
 
+// agnes 按 model 区分文字/视频，其余按 provider
+function catOf(c: any): string {
+  if (c.provider === "agnes") return (c.model || "").includes("video") ? "video" : "text";
+  return catMap[c.provider] || "other";
+}
+
 export default function AdminChannelsPage() {
   const [list, setList] = useState<any[]>([]);
-  const [form, setForm] = useState({ provider: "deepseek", name: "", apiKey: "", baseUrl: "", model: "", weight: 1, rateLimit: 60 });
+  const [form, setForm] = useState({ provider: "deepseek", name: "", apiKey: "", baseUrl: "", model: "deepseek-chat", weight: 1, rateLimit: 60 });
+  const [selV, setSelV] = useState("deepseek");
   const [loading, setLoading] = useState(false);
   const [activeCat, setActiveCat] = useState<"all" | "text" | "video" | "tts">("all");
 
@@ -46,7 +52,8 @@ export default function AdminChannelsPage() {
     const data = await res.json();
     if (!res.ok) alert(data.error || "创建失败");
     else {
-      setForm({ provider: "deepseek", name: "", apiKey: "", baseUrl: "", model: "", weight: 1, rateLimit: 60 });
+      setForm({ provider: "deepseek", name: "", apiKey: "", baseUrl: "", model: "deepseek-chat", weight: 1, rateLimit: 60 });
+      setSelV("deepseek");
       load();
     }
     setLoading(false);
@@ -86,7 +93,7 @@ export default function AdminChannelsPage() {
     }
   }
 
-  const filtered = activeCat === "all" ? list : list.filter((c) => catMap[c.provider] === activeCat);
+  const filtered = activeCat === "all" ? list : list.filter((c) => catOf(c) === activeCat);
 
   return (
     <div>
@@ -112,9 +119,17 @@ export default function AdminChannelsPage() {
       <div className="mt-6 rounded-2xl bg-[#1a1a1e] border border-white/10 p-4">
         <div className="text-sm font-bold">新增通道</div>
         <div className="grid grid-cols-2 gap-2 mt-3">
-          <select value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} className="px-3 py-2 rounded-xl bg-[#0f0f12] border border-white/10 text-sm">
+          <select
+            value={selV}
+            onChange={(e) => {
+              const opt = providers.find((p) => p.v === e.target.value) || providers[0];
+              setSelV(opt.v);
+              setForm({ ...form, provider: opt.provider, model: opt.defModel });
+            }}
+            className="px-3 py-2 rounded-xl bg-[#0f0f12] border border-white/10 text-sm"
+          >
             {providers.map((p) => (
-              <option key={`${p.v}-${p.l}`} value={p.v}>[{p.cat}] {p.l}</option>
+              <option key={p.v} value={p.v}>[{p.cat}] {p.l}</option>
             ))}
           </select>
           <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="通道名称 (如 deepseek-主)" className="px-3 py-2 rounded-xl bg-[#0f0f12] border border-white/10 text-sm" />
@@ -150,7 +165,7 @@ export default function AdminChannelsPage() {
                   <div className="text-white/60 text-xs">{c.name}</div>
                 </td>
                 <td className="p-3 text-center">
-                  <span className="px-2 py-1 rounded bg-white/5 text-xs">{catMap[c.provider] === "text" ? "文字" : catMap[c.provider] === "video" ? "视频" : catMap[c.provider] === "tts" ? "语音" : c.provider}</span>
+                  <span className="px-2 py-1 rounded bg-white/5 text-xs">{catOf(c) === "text" ? "文字" : catOf(c) === "video" ? "视频" : catOf(c) === "tts" ? "语音" : c.provider}</span>
                 </td>
                 <td className="p-3 text-center text-xs">{c.model || "-"}</td>
                 <td className="p-3 text-center font-mono text-xs">{c.apiKeyMasked}</td>
