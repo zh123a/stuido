@@ -14,19 +14,20 @@ function RegisterForm() {
     e.preventDefault();
     setLoading(true);
     setErr("");
-    const res = await fetch("/api/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) setErr(data.error || "注册失败");
-    else {
-      try {
-        const me = await fetch("/api/auth/me").then((x) => x.json());
-        if (me?.user?.role === "admin") (r.push as any)("/admin");
-        else (r.push as any)(next);
-      } catch {
-        (r.push as any)(next);
-      }
+    try {
+      const res = await fetch("/api/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ email, password }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "注册失败");
+      if (data.user?.role === "admin") (r.push as any)("/admin");
+      else (r.push as any)(next);
+      setTimeout(() => {
+        if (window.location.pathname.startsWith("/register") || window.location.pathname.startsWith("/login")) window.location.href = data.user?.role === "admin" ? "/admin" : next;
+      }, 800);
+    } catch (e: any) {
+      setErr(e.message || "注册失败");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] p-6">

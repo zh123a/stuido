@@ -14,20 +14,22 @@ function LoginForm() {
     e.preventDefault();
     setLoading(true);
     setErr("");
-    const res = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) setErr(data.error || "登录失败");
-    else {
-      // 按角色与 next 参数智能跳转
-      try {
-        const me = await fetch("/api/auth/me").then((x) => x.json());
-        if (me?.user?.role === "admin" && next === "/") (r.push as any)("/admin");
-        else (r.push as any)(next);
-      } catch {
-        (r.push as any)(next);
-      }
+    try {
+      const res = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ email, password }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "登录失败");
+      // 直接使用登录返回的角色，避免再次 fetch 丢失 cookie
+      if (data.user?.role === "admin" && next === "/") (r.push as any)("/admin");
+      else (r.push as any)(next);
+      // 兜底：若 push 未生效，强制刷新
+      setTimeout(() => {
+        if (window.location.pathname.startsWith("/login")) window.location.href = next === "/" && data.user?.role === "admin" ? "/admin" : next;
+      }, 800);
+    } catch (e: any) {
+      setErr(e.message || "登录失败");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] p-6">
